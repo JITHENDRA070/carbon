@@ -1,59 +1,73 @@
-import React, { useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import {
-  LineChart, Line, BarChart, Bar, XAxis, YAxis,
-  CartesianGrid, Tooltip, ResponsiveContainer, Legend
+  AreaChart, Area,
+  BarChart, Bar,
+  LineChart, Line,
+  PieChart, Pie, Cell,
+  XAxis, YAxis, CartesianGrid,
+  Tooltip, ResponsiveContainer, Legend,
 } from 'recharts';
 import { supabase } from '../lib/supabase';
+import './MiningDashboard.css';
 
-// ------------------------------------------------------------------
-// Emission factors (kg CO2e per unit)
-// ------------------------------------------------------------------
+// ─────────────────────────────────────────────────────────────────────────────
+// Constants
+// ─────────────────────────────────────────────────────────────────────────────
 const EF = {
-  diesel:      2.68,  // per litre
-  petrol:      2.31,  // per litre
-  electricity: 0.82,  // per kWh
-  methane:     28,    // per kg (GWP-100)
-  explosives:  0.17   // per kg
+  diesel:      2.68,
+  petrol:      2.31,
+  electricity: 0.82,
+  methane:     28,
+  explosives:  0.17,
 };
 
-/** Convert one raw mining row into kg CO2e values per category */
-function rowToEmissions(row) {
-  return {
-    diesel:      (row.diesel      || 0) * EF.diesel,
-    petrol:      (row.petrol      || 0) * EF.petrol,
-    electricity: (row.electricity || 0) * EF.electricity,
-    methane:     (row.methane     || 0) * EF.methane,
-    explosives:  (row.explosives  || 0) * EF.explosives,
-    total() { return this.diesel + this.petrol + this.electricity + this.methane + this.explosives; }
-  };
-}
-
-const CHART_COLORS = {
-  total:       '#10b981',
+const COLORS = {
   diesel:      '#f59e0b',
   petrol:      '#3b82f6',
   electricity: '#8b5cf6',
   methane:     '#ef4444',
-  explosives:  '#ec4899'
+  explosives:  '#ec4899',
+  total:       '#10b981',
 };
 
-const fmt = (n) => new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 }).format(n);
+const CATS = ['diesel', 'petrol', 'electricity', 'methane', 'explosives'];
 
-// ------------------------------------------------------------------
-// Aggregation helpers
-// ------------------------------------------------------------------
+const TOOLTIP_STYLE = {
+  backgroundColor: '#0f172a',
+  border: '1px solid rgba(255,255,255,0.1)',
+  borderRadius: '10px',
+  color: '#f8fafc',
+  fontSize: '0.82rem',
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Helpers
+// ─────────────────────────────────────────────────────────────────────────────
+const fmt    = (n) => new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 }).format(n ?? 0);
+const fmtT   = (n) => (n / 1000).toFixed(2) + ' t';   // kg → tonnes
+const pct    = (a, b) => b ? (((a - b) / b) * 100).toFixed(1) : null;
+
+function rowToEmissions(row) {
+  const d = (row.diesel      || 0) * EF.diesel;
+  const p = (row.petrol      || 0) * EF.petrol;
+  const e = (row.electricity || 0) * EF.electricity;
+  const m = (row.methane     || 0) * EF.methane;
+  const x = (row.explosives  || 0) * EF.explosives;
+  return { diesel: d, petrol: p, electricity: e, methane: m, explosives: x, total: d + p + e + m + x };
+}
+
+function makeBlank(label) {
+  return { label, diesel: 0, petrol: 0, electricity: 0, methane: 0, explosives: 0, total: 0 };
+}
+
 function aggregateByDay(rows) {
   const map = {};
   rows.forEach(row => {
-    const key = row.created_at.slice(0, 10); // YYYY-MM-DD
-    if (!map[key]) map[key] = { label: key, diesel: 0, petrol: 0, electricity: 0, methane: 0, explosives: 0, total: 0 };
+    const key = row.created_at.slice(0, 10);
+    if (!map[key]) map[key] = makeBlank(key);
     const e = rowToEmissions(row);
-    map[key].diesel      += e.diesel;
-    map[key].petrol      += e.petrol;
-    map[key].electricity += e.electricity;
-    map[key].methane     += e.methane;
-    map[key].explosives  += e.explosives;
-    map[key].total       += e.total();
+    CATS.forEach(c => { map[key][c] += e[c]; });
+    map[key].total += e.total;
   });
   return Object.values(map).sort((a, b) => a.label.localeCompare(b.label));
 }
@@ -61,18 +75,12 @@ function aggregateByDay(rows) {
 function aggregateByMonth(rows) {
   const map = {};
   rows.forEach(row => {
-    const d     = new Date(row.created_at);
-    const year  = d.getUTCFullYear();
-    const month = String(d.getUTCMonth() + 1).padStart(2, '0');
-    const key   = `${year}-${month}`;
-    if (!map[key]) map[key] = { label: key, diesel: 0, petrol: 0, electricity: 0, methane: 0, explosives: 0, total: 0 };
+    const d = new Date(row.created_at);
+    const key = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+    if (!map[key]) map[key] = makeBlank(key);
     const e = rowToEmissions(row);
-    map[key].diesel      += e.diesel;
-    map[key].petrol      += e.petrol;
-    map[key].electricity += e.electricity;
-    map[key].methane     += e.methane;
-    map[key].explosives  += e.explosives;
-    map[key].total       += e.total();
+    CATS.forEach(c => { map[key][c] += e[c]; });
+    map[key].total += e.total;
   });
   return Object.values(map).sort((a, b) => a.label.localeCompare(b.label));
 }
@@ -81,276 +89,411 @@ function aggregateByYear(rows) {
   const map = {};
   rows.forEach(row => {
     const key = String(new Date(row.created_at).getUTCFullYear());
-    if (!map[key]) map[key] = { label: key, diesel: 0, petrol: 0, electricity: 0, methane: 0, explosives: 0, total: 0 };
+    if (!map[key]) map[key] = makeBlank(key);
     const e = rowToEmissions(row);
-    map[key].diesel      += e.diesel;
-    map[key].petrol      += e.petrol;
-    map[key].electricity += e.electricity;
-    map[key].methane     += e.methane;
-    map[key].explosives  += e.explosives;
-    map[key].total       += e.total();
+    CATS.forEach(c => { map[key][c] += e[c]; });
+    map[key].total += e.total;
   });
   return Object.values(map).sort((a, b) => a.label.localeCompare(b.label));
 }
 
-// ------------------------------------------------------------------
-// Tooltip formatter
-// ------------------------------------------------------------------
-const tooltipStyle = { backgroundColor: '#1e293b', border: 'none', borderRadius: '8px', color: '#fff' };
-const tooltipFormatter = (val) => [`${fmt(val)} kg CO₂e`];
+// ─────────────────────────────────────────────────────────────────────────────
+// Sub-components
+// ─────────────────────────────────────────────────────────────────────────────
 
-// ------------------------------------------------------------------
-// Main Component
-// ------------------------------------------------------------------
-export default function MiningDashboard() {
-  const [mineId,   setMineId]   = useState('');
-  const [loading,  setLoading]  = useState(false);
-  const [error,    setError]    = useState(null);
-  const [rows,     setRows]     = useState(null); // null = not fetched yet
+function KpiCard({ icon, label, value, unit, sub, color, delta }) {
+  const up = delta > 0;
+  return (
+    <div className="mdb__kpi">
+      <div className="mdb__kpi-icon" style={{ background: `${color}18`, color }}>{icon}</div>
+      <div className="mdb__kpi-body">
+        <div className="mdb__kpi-label">{label}</div>
+        <div className="mdb__kpi-value" style={{ color }}>
+          {value} <span className="mdb__kpi-unit">{unit}</span>
+        </div>
+        <div className="mdb__kpi-sub">
+          {delta != null && (
+            <span className={`mdb__delta ${up ? 'mdb__delta--up' : 'mdb__delta--down'}`}>
+              {up ? '▲' : '▼'} {Math.abs(delta)}%
+            </span>
+          )}
+          {sub}
+        </div>
+      </div>
+    </div>
+  );
+}
 
+function SectionTab({ id, label, icon, active, onClick }) {
+  return (
+    <button
+      className={`mdb__tab ${active ? 'mdb__tab--active' : ''}`}
+      onClick={() => onClick(id)}
+    >
+      <span>{icon}</span> {label}
+    </button>
+  );
+}
+
+function EmptyState({ icon, text }) {
+  return (
+    <div className="mdb__empty">
+      <div className="mdb__empty-icon">{icon}</div>
+      <p>{text}</p>
+    </div>
+  );
+}
+
+function LoadingSpinner() {
+  return (
+    <div className="mdb__loading">
+      <div className="mdb__spinner" />
+      <p>Fetching emission data from Supabase…</p>
+    </div>
+  );
+}
+
+// Custom donut label
+function DonutLabel({ cx, cy, total }) {
+  return (
+    <text x={cx} y={cy} textAnchor="middle" fill="#f8fafc" dominantBaseline="middle">
+      <tspan x={cx} dy="-0.6em" fontSize="1.4rem" fontWeight="700">{(total / 1000).toFixed(1)}</tspan>
+      <tspan x={cx} dy="1.5em" fontSize="0.72rem" fill="#94a3b8">tonnes CO₂e</tspan>
+    </text>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Chart panels
+// ─────────────────────────────────────────────────────────────────────────────
+function ChartPanel({ title, subtitle, children }) {
+  return (
+    <div className="mdb__chart-card">
+      <div className="mdb__chart-header">
+        <div>
+          <div className="mdb__chart-title">{title}</div>
+          {subtitle && <div className="mdb__chart-sub">{subtitle}</div>}
+        </div>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function DataTable({ rows, cols }) {
+  return (
+    <div className="mdb__table-wrap">
+      <table className="mdb__table">
+        <thead>
+          <tr>
+            {cols.map(c => <th key={c.key} style={{ color: c.color }}>{c.label}</th>)}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row, i) => (
+            <tr key={i}>
+              {cols.map(c => (
+                <td key={c.key} style={{ color: c.color, fontWeight: c.bold ? 700 : 400 }}>
+                  {c.format ? c.format(row[c.key]) : fmt(row[c.key])}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Main Dashboard
+// ─────────────────────────────────────────────────────────────────────────────
+export default function MiningDashboard({ mineId: lockedMineId = '' }) {
+  const [rows,    setRows]    = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error,   setError]   = useState(null);
+  const [view,    setView]    = useState('daily');   // 'daily' | 'monthly' | 'yearly'
+
+  // ── Fetch ──────────────────────────────────────────────────────────────────
   const fetchData = useCallback(async () => {
-    if (!mineId.trim()) return;
+    if (!lockedMineId) return;
     setLoading(true);
     setError(null);
     setRows(null);
     const { data, error: err } = await supabase
       .from('mining')
-      .select('created_at, diesel, petrol, electricity, methane, explosives')
-      .eq('mineid', mineId.trim())
+      .select('created_at, diesel, petrol, electricity, methane, explosives, workers')
+      .eq('mineid', lockedMineId)
       .order('created_at', { ascending: true });
     setLoading(false);
     if (err) { setError(err.message); return; }
-    setRows(data);
-  }, [mineId]);
+    setRows(data ?? []);
+  }, [lockedMineId]);
 
-  // Aggregate only when rows exist
-  const daily   = rows ? aggregateByDay(rows)   : [];
-  const monthly = rows ? aggregateByMonth(rows) : [];
-  const yearly  = rows ? aggregateByYear(rows)  : [];
+  useEffect(() => { fetchData(); }, [fetchData]);
 
-  const totalCO2 = rows
-    ? rows.reduce((sum, r) => sum + rowToEmissions(r).total(), 0)
-    : 0;
+  // ── Aggregations ────────────────────────────────────────────────────────────
+  const daily   = useMemo(() => rows ? aggregateByDay(rows)   : [], [rows]);
+  const monthly = useMemo(() => rows ? aggregateByMonth(rows) : [], [rows]);
+  const yearly  = useMemo(() => rows ? aggregateByYear(rows)  : [], [rows]);
 
-  const categories = ['diesel', 'petrol', 'electricity', 'methane', 'explosives'];
+  const viewData = view === 'daily' ? daily : view === 'monthly' ? monthly : yearly;
 
+  const totalCO2   = useMemo(() => rows ? rows.reduce((s, r) => s + rowToEmissions(r).total, 0) : 0, [rows]);
+  const avgDay     = daily.length   ? totalCO2 / daily.length   : 0;
+  const avgMonth   = monthly.length ? totalCO2 / monthly.length : 0;
+  const latestDay  = daily.at(-1);
+  const prevDay    = daily.at(-2);
+  const dayDelta   = (latestDay && prevDay) ? pct(latestDay.total, prevDay.total) : null;
+
+  // Donut breakdown (all-time totals per category)
+  const donutData = useMemo(() => {
+    if (!rows || rows.length === 0) return [];
+    const agg = { diesel: 0, petrol: 0, electricity: 0, methane: 0, explosives: 0 };
+    rows.forEach(r => {
+      const e = rowToEmissions(r);
+      CATS.forEach(c => { agg[c] += e[c]; });
+    });
+    return CATS.map(c => ({ name: c.charAt(0).toUpperCase() + c.slice(1), value: Math.round(agg[c]), color: COLORS[c] }))
+               .filter(d => d.value > 0);
+  }, [rows]);
+
+  // ── Table columns config ───────────────────────────────────────────────────
+  const tableCols = [
+    { key: 'label',       label: 'Period',         format: v => v,            color: '#f8fafc', bold: true },
+    { key: 'total',       label: 'Total (kg CO₂e)',format: fmt,               color: COLORS.total, bold: true },
+    { key: 'diesel',      label: 'Diesel',         format: fmt,               color: COLORS.diesel },
+    { key: 'petrol',      label: 'Petrol',         format: fmt,               color: COLORS.petrol },
+    { key: 'electricity', label: 'Electricity',    format: fmt,               color: COLORS.electricity },
+    { key: 'methane',     label: 'Methane',        format: fmt,               color: COLORS.methane },
+    { key: 'explosives',  label: 'Explosives',     format: fmt,               color: COLORS.explosives },
+  ];
+
+  // ── Render states ──────────────────────────────────────────────────────────
+  if (loading) return <LoadingSpinner />;
+  if (error)   return (
+    <div className="mdb__error">
+      <span>❌</span> {error}
+      <button className="mdb__retry" onClick={fetchData}>Retry</button>
+    </div>
+  );
+  if (!rows || rows.length === 0) return (
+    <EmptyState icon="📭" text={`No emission records found for mine "${lockedMineId}". Submit your first daily log to see the dashboard.`} />
+  );
+
+  // ── Main render ────────────────────────────────────────────────────────────
   return (
-    <div className="fade-in">
-      {/* Mine Search Bar */}
-      <div style={{ display: 'flex', gap: '1rem', marginBottom: '2rem', alignItems: 'flex-end' }}>
-        <div className="form-group" style={{ flex: 1 }}>
-          <label>Mine ID</label>
-          <input
-            type="text"
-            value={mineId}
-            onChange={e => setMineId(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && fetchData()}
-            placeholder="e.g. IND-COAL-01"
-            style={{ fontSize: '1rem' }}
-          />
+    <div className="mdb fade-in">
+
+      {/* ── Top header strip ── */}
+      <div className="mdb__header">
+        <div>
+          <h2 className="mdb__title">Carbon Emissions Dashboard</h2>
+          <p className="mdb__subtitle">
+            Mine <strong style={{ color: '#10b981' }}>{lockedMineId}</strong> · {rows.length} records ·{' '}
+            <span style={{ color: '#94a3b8' }}>Last updated {rows.at(-1)?.created_at?.slice(0, 10)}</span>
+          </p>
         </div>
-        <button
-          className="btn-primary"
-          onClick={fetchData}
-          disabled={loading || !mineId.trim()}
-          style={{ opacity: loading ? 0.7 : 1, whiteSpace: 'nowrap' }}
-        >
-          {loading ? '⏳ Loading…' : '🔍 Fetch Emissions'}
+        <button className="mdb__refresh" onClick={fetchData} title="Refresh data">
+          🔄 Refresh
         </button>
       </div>
 
-      {/* Error */}
-      {error && (
-        <div style={{ padding: '1rem', background: 'rgba(239,68,68,0.15)', border: '1px solid #ef4444', borderRadius: '8px', color: '#ef4444', marginBottom: '1.5rem' }}>
-          ❌ {error}
-        </div>
-      )}
+      {/* ── KPI strip ── */}
+      <div className="mdb__kpi-grid">
+        <KpiCard
+          icon="🔥" label="Total CO₂e (All Time)"
+          value={fmt(totalCO2)} unit="kg"
+          sub={`≈ ${fmtT(totalCO2)}`}
+          color="#ef4444"
+        />
+        <KpiCard
+          icon="📅" label="Today / Latest Day"
+          value={fmt(latestDay?.total)} unit="kg"
+          sub={latestDay?.label ?? '—'}
+          color="#f59e0b"
+          delta={dayDelta != null ? parseFloat(dayDelta) : null}
+        />
+        <KpiCard
+          icon="📆" label="Avg Daily Emission"
+          value={fmt(avgDay)} unit="kg/day"
+          sub={`Across ${daily.length} day${daily.length !== 1 ? 's' : ''}`}
+          color="#3b82f6"
+        />
+        <KpiCard
+          icon="🗓️" label="Avg Monthly Emission"
+          value={fmt(avgMonth)} unit="kg/mo"
+          sub={`Across ${monthly.length} month${monthly.length !== 1 ? 's' : ''}`}
+          color="#8b5cf6"
+        />
+        <KpiCard
+          icon="📊" label="Records Logged"
+          value={rows.length} unit="entries"
+          sub={`${yearly.length} year${yearly.length !== 1 ? 's' : ''} of data`}
+          color="#10b981"
+        />
+      </div>
 
-      {/* No data yet */}
-      {rows === null && !loading && !error && (
-        <div className="kpi-card" style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
-          <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>⛏️</div>
-          <p>Enter a Mine ID and click "Fetch Emissions" to load the dashboard.</p>
-        </div>
-      )}
+      {/* ── Donut + Top Source row ── */}
+      <div className="mdb__two-col" style={{ marginBottom: '1.5rem' }}>
 
-      {/* Empty results */}
-      {rows !== null && rows.length === 0 && (
-        <div className="kpi-card" style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
-          <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>📭</div>
-          <p>No records found for Mine ID <strong>"{mineId}"</strong>.</p>
-        </div>
-      )}
+        <ChartPanel title="🍩 All-Time Source Breakdown" subtitle="Share of total CO₂e by emission source">
+          <div style={{ height: 260, position: 'relative' }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={donutData} dataKey="value"
+                  cx="50%" cy="50%"
+                  innerRadius={70} outerRadius={110}
+                  paddingAngle={3} stroke="none"
+                  labelLine={false}
+                >
+                  {donutData.map((entry, i) => (
+                    <Cell key={i} fill={entry.color} />
+                  ))}
+                </Pie>
+                <DonutLabel cx={donutData.length ? undefined : 160} cy={130} total={totalCO2} />
+                <Tooltip
+                  contentStyle={TOOLTIP_STYLE}
+                  formatter={(val, name) => [`${fmt(val)} kg (${((val / totalCO2) * 100).toFixed(1)}%)`, name]}
+                />
+                <Legend
+                  iconType="circle" iconSize={8}
+                  formatter={(v, e) => <span style={{ color: e.color, fontSize: '0.78rem' }}>{v}</span>}
+                />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+        </ChartPanel>
 
-      {/* Results */}
-      {rows && rows.length > 0 && (
+        {/* Source breakdown bars */}
+        <ChartPanel title="📊 Source Totals (All Time)" subtitle="kg CO₂e per emission category">
+          <div style={{ height: 260 }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={donutData} layout="vertical" barCategoryGap="20%">
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" horizontal={false} />
+                <XAxis type="number" stroke="#94a3b8" fontSize={11} tickLine={false} axisLine={false}
+                  tickFormatter={v => `${(v / 1000).toFixed(0)}k`} />
+                <YAxis type="category" dataKey="name" stroke="#94a3b8" fontSize={11} tickLine={false} axisLine={false} width={80} />
+                <Tooltip contentStyle={TOOLTIP_STYLE} formatter={v => [`${fmt(v)} kg CO₂e`]} />
+                <Bar dataKey="value" name="CO₂e" radius={[0, 6, 6, 0]}>
+                  {donutData.map((entry, i) => <Cell key={i} fill={entry.color} />)}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </ChartPanel>
+      </div>
+
+      {/* ── Time view tabs ── */}
+      <div className="mdb__tabs">
+        <SectionTab id="daily"   label="Daily"   icon="📅" active={view === 'daily'}   onClick={setView} />
+        <SectionTab id="monthly" label="Monthly" icon="📆" active={view === 'monthly'} onClick={setView} />
+        <SectionTab id="yearly"  label="Yearly"  icon="🗓️" active={view === 'yearly'}  onClick={setView} />
+      </div>
+
+      {viewData.length === 0 ? (
+        <EmptyState icon="📭" text="No data available for this view." />
+      ) : (
         <>
-          {/* KPI Summary Row */}
-          <div className="kpi-grid" style={{ marginBottom: '2rem' }}>
-            <div className="kpi-card">
-              <div className="kpi-title">📦 Total Records</div>
-              <div className="kpi-value">{rows.length}</div>
-              <div className="kpi-trend">For Mine: {mineId}</div>
-            </div>
-            <div className="kpi-card">
-              <div className="kpi-title">🔥 Total CO₂ Emissions</div>
-              <div className="kpi-value" style={{ color: 'var(--accent-red)' }}>
-                {fmt(totalCO2)} <span style={{ fontSize: '1rem' }}>kg CO₂e</span>
-              </div>
-              <div className="kpi-trend">All time</div>
-            </div>
-            <div className="kpi-card">
-              <div className="kpi-title">📅 Avg Daily Emission</div>
-              <div className="kpi-value" style={{ color: 'var(--accent-orange)' }}>
-                {fmt(daily.length ? totalCO2 / daily.length : 0)} <span style={{ fontSize: '1rem' }}>kg/day</span>
-              </div>
-              <div className="kpi-trend">Across {daily.length} days</div>
-            </div>
-            <div className="kpi-card">
-              <div className="kpi-title">🗓️ Avg Monthly Emission</div>
-              <div className="kpi-value" style={{ color: 'var(--accent-purple)' }}>
-                {fmt(monthly.length ? totalCO2 / monthly.length : 0)} <span style={{ fontSize: '1rem' }}>kg/mo</span>
-              </div>
-              <div className="kpi-trend">Across {monthly.length} months</div>
-            </div>
-          </div>
-
-          {/* ── Line Chart: Daily CO₂ Trend ─────────────────────── */}
-          <div className="chart-card" style={{ marginBottom: '1.5rem' }}>
-            <div className="chart-header">
-              <h3>📈 Daily CO₂ Emissions — Line Trend</h3>
-              <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Total kg CO₂e emitted per day</p>
-            </div>
+          {/* ── Area: Total CO₂ trend ── */}
+          <ChartPanel
+            title={`📈 Total CO₂e — ${view.charAt(0).toUpperCase() + view.slice(1)} Trend`}
+            subtitle={`kg CO₂e emitted per ${view === 'daily' ? 'day' : view === 'monthly' ? 'month' : 'year'}`}
+          >
             <div style={{ height: 300 }}>
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={daily}>
+                <AreaChart data={viewData} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="gradTotal" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%"  stopColor="#10b981" stopOpacity={0.35} />
+                      <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
                   <XAxis dataKey="label" stroke="#94a3b8" fontSize={11} tickLine={false} axisLine={false} />
-                  <YAxis stroke="#94a3b8" fontSize={11} tickLine={false} axisLine={false} tickFormatter={v => `${(v/1000).toFixed(1)}k`} />
-                  <Tooltip contentStyle={tooltipStyle} formatter={tooltipFormatter} />
-                  <Line type="monotone" dataKey="total" name="Total CO₂e" stroke={CHART_COLORS.total} strokeWidth={2.5} dot={{ r: 4, fill: CHART_COLORS.total }} activeDot={{ r: 6 }} />
-                </LineChart>
+                  <YAxis stroke="#94a3b8" fontSize={11} tickLine={false} axisLine={false}
+                    tickFormatter={v => `${(v / 1000).toFixed(0)}k`} />
+                  <Tooltip contentStyle={TOOLTIP_STYLE} formatter={v => [`${fmt(v)} kg CO₂e`, 'Total']} />
+                  <Area
+                    type="monotone" dataKey="total" name="Total CO₂e"
+                    stroke="#10b981" strokeWidth={2.5}
+                    fill="url(#gradTotal)"
+                    dot={{ r: 3, fill: '#10b981', strokeWidth: 0 }}
+                    activeDot={{ r: 6, fill: '#10b981' }}
+                  />
+                </AreaChart>
               </ResponsiveContainer>
             </div>
-          </div>
+          </ChartPanel>
 
-          {/* ── Line Chart: Monthly CO₂ Trend ───────────────────── */}
-          <div className="chart-card" style={{ marginBottom: '1.5rem' }}>
-            <div className="chart-header">
-              <h3>📈 Monthly CO₂ Emissions — Line Trend</h3>
-              <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Aggregated monthly total kg CO₂e</p>
-            </div>
-            <div style={{ height: 300 }}>
+          {/* ── Stacked bar by source ── */}
+          <ChartPanel
+            title={`📊 Emissions by Source — ${view.charAt(0).toUpperCase() + view.slice(1)} Breakdown`}
+            subtitle="Stacked kg CO₂e · Diesel · Petrol · Electricity · Methane · Explosives"
+          >
+            <div style={{ height: 320 }}>
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={monthly}>
+                <BarChart data={viewData} barCategoryGap="25%">
                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
                   <XAxis dataKey="label" stroke="#94a3b8" fontSize={11} tickLine={false} axisLine={false} />
-                  <YAxis stroke="#94a3b8" fontSize={11} tickLine={false} axisLine={false} tickFormatter={v => `${(v/1000).toFixed(0)}k`} />
-                  <Tooltip contentStyle={tooltipStyle} formatter={tooltipFormatter} />
-                  <Line type="monotone" dataKey="total" name="Monthly CO₂e" stroke="#3b82f6" strokeWidth={2.5} dot={{ r: 5, fill: '#3b82f6' }} activeDot={{ r: 7 }} />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-
-          {/* ── Bar Chart: Categorised Daily Emissions ───────────── */}
-          <div className="chart-card" style={{ marginBottom: '1.5rem' }}>
-            <div className="chart-header">
-              <h3>📊 Daily Categorised Emissions — Stacked Bar</h3>
-              <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Breakdown by source: Diesel · Petrol · Electricity · Methane · Explosives</p>
-            </div>
-            <div style={{ height: 350 }}>
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={daily} barCategoryGap="30%">
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
-                  <XAxis dataKey="label" stroke="#94a3b8" fontSize={11} tickLine={false} axisLine={false} />
-                  <YAxis stroke="#94a3b8" fontSize={11} tickLine={false} axisLine={false} tickFormatter={v => `${(v/1000).toFixed(1)}k`} />
-                  <Tooltip contentStyle={tooltipStyle} formatter={(v, n) => [`${fmt(v)} kg`, n]} />
-                  <Legend iconType="circle" />
-                  {categories.map(cat => (
-                    <Bar key={cat} dataKey={cat} name={cat.charAt(0).toUpperCase() + cat.slice(1)} stackId="a" fill={CHART_COLORS[cat]} />
+                  <YAxis stroke="#94a3b8" fontSize={11} tickLine={false} axisLine={false}
+                    tickFormatter={v => `${(v / 1000).toFixed(0)}k`} />
+                  <Tooltip contentStyle={TOOLTIP_STYLE} formatter={(v, n) => [`${fmt(v)} kg`, n]} />
+                  <Legend iconType="circle" iconSize={8}
+                    formatter={(v, e) => <span style={{ color: e.color, fontSize: '0.78rem' }}>{v}</span>} />
+                  {CATS.map(cat => (
+                    <Bar
+                      key={cat} dataKey={cat} stackId="a"
+                      name={cat.charAt(0).toUpperCase() + cat.slice(1)}
+                      fill={COLORS[cat]}
+                      radius={cat === 'explosives' ? [4, 4, 0, 0] : [0, 0, 0, 0]}
+                    />
                   ))}
                 </BarChart>
               </ResponsiveContainer>
             </div>
-          </div>
+          </ChartPanel>
 
-          {/* Two-column bottom row */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', marginBottom: '2rem' }}>
-
-            {/* ── Bar Chart: Monthly Categorised ──────────────────── */}
-            <div className="chart-card">
-              <div className="chart-header">
-                <h3>📊 Monthly Categorised Emissions</h3>
-              </div>
-              <div style={{ height: 300 }}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={monthly} barCategoryGap="30%">
-                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
-                    <XAxis dataKey="label" stroke="#94a3b8" fontSize={11} tickLine={false} axisLine={false} />
-                    <YAxis stroke="#94a3b8" fontSize={11} tickLine={false} axisLine={false} tickFormatter={v => `${(v/1000).toFixed(0)}k`} />
-                    <Tooltip contentStyle={tooltipStyle} formatter={(v, n) => [`${fmt(v)} kg`, n]} />
-                    <Legend iconType="circle" />
-                    {categories.map(cat => (
-                      <Bar key={cat} dataKey={cat} name={cat.charAt(0).toUpperCase() + cat.slice(1)} stackId="a" fill={CHART_COLORS[cat]} />
-                    ))}
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-
-            {/* ── Bar Chart: Yearly CO₂ Growth ────────────────────── */}
-            <div className="chart-card">
-              <div className="chart-header">
-                <h3>📊 Yearly CO₂ Growth</h3>
-              </div>
-              <div style={{ height: 300 }}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={yearly} barCategoryGap="40%">
-                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
-                    <XAxis dataKey="label" stroke="#94a3b8" fontSize={11} tickLine={false} axisLine={false} />
-                    <YAxis stroke="#94a3b8" fontSize={11} tickLine={false} axisLine={false} tickFormatter={v => `${(v/1000).toFixed(0)}k`} />
-                    <Tooltip contentStyle={tooltipStyle} formatter={(v, n) => [`${fmt(v)} kg CO₂e`, n]} />
-                    <Legend iconType="circle" />
-                    {categories.map(cat => (
-                      <Bar key={cat} dataKey={cat} name={cat.charAt(0).toUpperCase() + cat.slice(1)} stackId="a" fill={CHART_COLORS[cat]} />
-                    ))}
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-
-          </div>
-
-          {/* ── Raw Data Table ───────────────────────────────────── */}
-          <div className="chart-card">
-            <div className="chart-header">
-              <h3>🗄️ Yearly Summary Table</h3>
-            </div>
-            <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
-                <thead>
-                  <tr style={{ textAlign: 'left', borderBottom: '1px solid var(--border-light)' }}>
-                    {['Year', 'Diesel (kg)', 'Petrol (kg)', 'Electricity (kg)', 'Methane (kg)', 'Explosives (kg)', 'Total CO₂e (kg)'].map(h => (
-                      <th key={h} style={{ padding: '0.75rem', color: 'var(--text-muted)', fontWeight: 500 }}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {yearly.map(row => (
-                    <tr key={row.label} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-                      <td style={{ padding: '0.75rem', fontWeight: 600 }}>{row.label}</td>
-                      <td style={{ padding: '0.75rem', color: CHART_COLORS.diesel }}>{fmt(row.diesel)}</td>
-                      <td style={{ padding: '0.75rem', color: CHART_COLORS.petrol }}>{fmt(row.petrol)}</td>
-                      <td style={{ padding: '0.75rem', color: CHART_COLORS.electricity }}>{fmt(row.electricity)}</td>
-                      <td style={{ padding: '0.75rem', color: CHART_COLORS.methane }}>{fmt(row.methane)}</td>
-                      <td style={{ padding: '0.75rem', color: CHART_COLORS.explosives }}>{fmt(row.explosives)}</td>
-                      <td style={{ padding: '0.75rem', color: 'var(--accent-green)', fontWeight: 700 }}>{fmt(row.total)}</td>
-                    </tr>
+          {/* ── Multi-line per source ── */}
+          <ChartPanel
+            title={`📉 Source-wise Trend Lines — ${view.charAt(0).toUpperCase() + view.slice(1)}`}
+            subtitle="Individual CO₂e contribution per emission source"
+          >
+            <div style={{ height: 300 }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={viewData} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
+                  <XAxis dataKey="label" stroke="#94a3b8" fontSize={11} tickLine={false} axisLine={false} />
+                  <YAxis stroke="#94a3b8" fontSize={11} tickLine={false} axisLine={false}
+                    tickFormatter={v => `${(v / 1000).toFixed(1)}k`} />
+                  <Tooltip contentStyle={TOOLTIP_STYLE} formatter={(v, n) => [`${fmt(v)} kg`, n]} />
+                  <Legend iconType="circle" iconSize={8}
+                    formatter={(v, e) => <span style={{ color: e.color, fontSize: '0.78rem' }}>{v}</span>} />
+                  {CATS.map(cat => (
+                    <Line
+                      key={cat} type="monotone" dataKey={cat}
+                      name={cat.charAt(0).toUpperCase() + cat.slice(1)}
+                      stroke={COLORS[cat]} strokeWidth={2}
+                      dot={false} activeDot={{ r: 5 }}
+                    />
                   ))}
-                </tbody>
-              </table>
+                </LineChart>
+              </ResponsiveContainer>
             </div>
+          </ChartPanel>
+
+          {/* ── Data table ── */}
+          <div className="mdb__chart-card">
+            <div className="mdb__chart-header">
+              <div>
+                <div className="mdb__chart-title">
+                  🗄️ {view.charAt(0).toUpperCase() + view.slice(1)} Summary Table
+                </div>
+                <div className="mdb__chart-sub">All values in kg CO₂e</div>
+              </div>
+            </div>
+            <DataTable rows={[...viewData].reverse()} cols={tableCols} />
           </div>
         </>
       )}

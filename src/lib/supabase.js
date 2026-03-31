@@ -11,4 +11,5 @@ if (!url || !anonKey) {
 
 export const supabase = createClient(url ?? '', anonKey ?? '')
 
-export const MINING_TABLE = import.meta.env.VITE_SUPABASE_TABLE ?? 'mining'
+export const MINING_TABLE    = import.meta.env.VITE_SUPABASE_TABLE ?? 'mining'
+export const MINE_AUTH_TABLE = 'mineauth'

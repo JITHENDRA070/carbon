@@ -1,9 +1,11 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
 import { calculateEmissions, calculateSinks, calculateGapAnalysis } from './utils/carbonLogic';
 import { supabase } from './lib/supabase';
 import MiningDashboard from './components/MiningDashboard';
 import CarbonSinkModule from './components/CarbonSinkModule';
+import MineAuthGate from './components/MineAuthGate';
+import Navbar from './components/Navbar';
 
 const MOCK_HISTORICAL_DATA = Array.from({ length: 30 }, (_, i) => {
   const day = i + 1;
@@ -40,9 +42,8 @@ export default function CarbonDashboard() {
   // Modal state for upsert confirmation
   const [upsertModal, setUpsertModal] = useState(null); // null | { existingRecord, newData }
 
-  // Form State
+  // Form State (mineId comes from auth; do not let users type it)
   const [formData, setFormData] = useState({
-    mineId: 'IND-COAL-01',
     workers: 150,
     dieselLiters: 1200,
     petrolLiters: 450,
@@ -64,6 +65,11 @@ export default function CarbonDashboard() {
     methaneCapture: 0,
     newTrees: 0
   });
+
+  // Carbon Credit Market State
+  const [creditPriceInr, setCreditPriceInr] = useState(850); // INR per tCO₂e (India VCM reference)
+  const [creditPriceUsd, setCreditPriceUsd] = useState(10);  // USD reference
+  const [selectedMarket, setSelectedMarket] = useState('vcm'); // 'vcm' | 'compliance'
 
   // Calculate Current Metrics
   const currentEmissions = useMemo(() => {
@@ -98,14 +104,14 @@ export default function CarbonDashboard() {
     const { name, value } = e.target;
     setFormData(prev => ({
       ...prev,
-      [name]: name === 'mineId' ? value : (parseFloat(value) || 0)
+      [name]: (parseFloat(value) || 0)
     }));
   };
 
   // Build exact row payload matching the `mining` table columns.
   // created_at is intentionally OMITTED — Supabase auto-inserts it via DEFAULT now().
-  const buildMiningRecord = () => ({
-    mineid: formData.mineId,
+  const buildMiningRecord = (mineId) => ({
+    mineid: mineId,
     workers: formData.workers,
     diesel: formData.dieselLiters,
     petrol: formData.petrolLiters,
@@ -115,14 +121,13 @@ export default function CarbonDashboard() {
   });
 
   const today = new Date().toISOString().split('T')[0];
-  const recordKey = `${formData.mineId}__${today}`;
 
   // Check if a record for this mine already exists today
-  const checkExistingRecord = async () => {
+  const checkExistingRecord = async (mineId) => {
     const { data, error } = await supabase
       .from('mining')
       .select('mineid, created_at')
-      .eq('mineid', formData.mineId)
+      .eq('mineid', mineId)
       .gte('created_at', `${today}T00:00:00.000Z`)
       .lte('created_at', `${today}T23:59:59.999Z`)
       .maybeSingle();
@@ -130,20 +135,20 @@ export default function CarbonDashboard() {
     return data; // null if no record found
   };
 
-  const handleSaveLog = async () => {
+  const handleSaveLog = async (mineId) => {
     try {
       setIsSaving(true);
-      const existing = await checkExistingRecord();
+      const existing = await checkExistingRecord(mineId);
       if (existing) {
         // Duplicate — show update confirmation modal
-        setUpsertModal({ existingRecord: existing, newData: buildMiningRecord() });
+        setUpsertModal({ existingRecord: existing, newData: buildMiningRecord(mineId), mineId });
       } else {
         // Fresh INSERT — created_at auto-set by Supabase to now()
         const { error } = await supabase
           .from('mining')
-          .insert(buildMiningRecord());
+          .insert(buildMiningRecord(mineId));
         if (error) throw error;
-        alert(`✅ Log saved to mining table!\nMine: ${formData.mineId}\nTime: ${new Date().toISOString()}`);
+        alert(`✅ Log saved to mining table!\nMine: ${mineId}\nTime: ${new Date().toISOString()}`);
         setActiveTab('dashboard');
       }
     } catch (err) {
@@ -157,16 +162,18 @@ export default function CarbonDashboard() {
   const handleConfirmUpdate = async () => {
     try {
       setIsSaving(true);
+      const mineId = upsertModal?.mineId
+      if (!mineId) throw new Error('Missing mine id for update.')
       // UPDATE matching row by mineid for today's date range
       const { error } = await supabase
         .from('mining')
-        .update(buildMiningRecord())
-        .eq('mineid', formData.mineId)
+        .update(buildMiningRecord(mineId))
+        .eq('mineid', mineId)
         .gte('created_at', `${today}T00:00:00.000Z`)
         .lte('created_at', `${today}T23:59:59.999Z`);
       if (error) throw error;
       setUpsertModal(null);
-      alert(`🔄 Record updated in mining table!\nMine: ${formData.mineId}`);
+      alert(`🔄 Record updated in mining table!\nMine: ${mineId}`);
       setActiveTab('dashboard');
     } catch (err) {
       console.error('[mining] UPDATE error:', err);
@@ -186,7 +193,11 @@ export default function CarbonDashboard() {
   );
 
   return (
-    <div className="dashboard-container">
+    <MineAuthGate>
+      {({ mineId }) => (
+        <>
+        <Navbar />
+        <div className="dashboard-container">
       {/* Sidebar */}
       <aside className="sidebar">
         <div className="brand">
@@ -218,11 +229,7 @@ export default function CarbonDashboard() {
         {/* === EMISSIONS ANALYTICS (Supabase-powered) === */}
         {activeTab === 'analytics' && (
           <div className="fade-in">
-            <div style={{ marginBottom: '2rem' }}>
-              <h2>Mine Emissions Analytics</h2>
-              <p style={{ color: 'var(--text-muted)', marginTop: '0.25rem' }}>Enter a Mine ID to fetch, calculate, and visualise CO₂ emissions from Supabase.</p>
-            </div>
-            <MiningDashboard />
+            <MiningDashboard mineId={mineId} />
           </div>
         )}
 
@@ -351,13 +358,11 @@ export default function CarbonDashboard() {
         {activeTab === 'data-entry' && (
           <div className="data-entry-module fade-in">
             <h2>Submit Daily Log</h2>
-            <p style={{ color: 'var(--text-muted)', marginBottom: '2rem' }}>Enter the operational consumption data for the day.</p>
+            <p style={{ color: 'var(--text-muted)', marginBottom: '2rem' }}>
+              Logged in as mine <strong>{mineId}</strong>. Your entry will be saved against this mine automatically.
+            </p>
 
             <div className="form-grid">
-              <div className="form-group">
-                <label>Mine ID</label>
-                <input type="text" name="mineId" value={formData.mineId} onChange={handleInputChange} />
-              </div>
               <div className="form-group">
                 <label>Number of Workers</label>
                 <input type="number" name="workers" value={formData.workers} onChange={handleInputChange} min="0" />
@@ -386,7 +391,7 @@ export default function CarbonDashboard() {
 
             <button
               className="btn-primary"
-              onClick={handleSaveLog}
+              onClick={() => handleSaveLog(mineId)}
               disabled={isSaving}
               style={{ opacity: isSaving ? 0.7 : 1, cursor: isSaving ? 'not-allowed' : 'pointer' }}
             >
@@ -482,7 +487,282 @@ export default function CarbonDashboard() {
             </div>
           </div>
         )}
+
+        {/* === CARBON CREDITS MARKET === */}
+        {activeTab === 'credits' && (() => {
+          // ── Live calculations ──────────────────────────────────────────
+          const INR_USD = 0.012; // approximate
+          const totalEmKg  = currentEmissions.totalEmissions;   // kg CO₂e / day
+          const totalEmTco = totalEmKg / 1000;                  // tCO₂e / day
+          const totalSinksTco = currentSinks / 1000;            // tCO₂e / day
+          const netGapTco  = totalEmTco - totalSinksTco;        // positive = deficit
+          const annualEmTco  = totalEmTco  * 365;
+          const annualSinkTco = totalSinksTco * 365;
+          const annualNetGap  = netGapTco * 365;                // annual net
+          const creditsEarned = annualNetGap < 0 ? Math.abs(annualNetGap) : 0;
+          const creditsNeeded = annualNetGap > 0 ? annualNetGap : 0;
+          const creditValueInr = creditsEarned * creditPriceInr;
+          const creditValueUsd = creditsEarned * creditPriceUsd;
+          const offsetCostInr  = creditsNeeded * creditPriceInr;
+          const offsetCostUsd  = creditsNeeded * creditPriceUsd;
+          const isNetPositive  = annualNetGap <= 0;
+
+          // Reduction % vs unadjusted baseline
+          const reductionPct = annualEmTco > 0
+            ? Math.min(100, (annualSinkTco / annualEmTco) * 100).toFixed(1)
+            : '0.0';
+
+          // Market tier prices (illustrative)
+          const markets = [
+            { key: 'vcm',        label: 'Voluntary Carbon Market',   priceInr: 850,  priceUsd: 10,  color: '#10b981', icon: '🌿' },
+            { key: 'compliance', label: 'Compliance / Cap-and-Trade', priceInr: 2125, priceUsd: 25,  color: '#3b82f6', icon: '⚖️' },
+            { key: 'premium',    label: 'Premium Quality Credits',   priceInr: 5100, priceUsd: 60,  color: '#f59e0b', icon: '🏆' },
+          ];
+
+          const handleMarketSelect = (mkt) => {
+            setSelectedMarket(mkt.key);
+            setCreditPriceInr(mkt.priceInr);
+            setCreditPriceUsd(mkt.priceUsd);
+          };
+
+          return (
+            <div className="credits-market fade-in">
+              {/* ── Header ────────────────────────────────────────────── */}
+              <div className="credits-header">
+                <div>
+                  <h2 className="credits-title">💰 Carbon Credit Market</h2>
+                  <p className="credits-subtitle">
+                    Real-time valuation of your mine's carbon position based on daily activity data.
+                  </p>
+                </div>
+                <div className={`credits-status-badge ${isNetPositive ? 'credits-status-badge--earn' : 'credits-status-badge--buy'}`}>
+                  {isNetPositive ? '✅ Credit Earner' : '⚠️ Offset Buyer'}
+                </div>
+              </div>
+
+              {/* ── Market Selector ───────────────────────────────────── */}
+              <div className="credits-market-tabs">
+                {markets.map(mkt => (
+                  <button
+                    key={mkt.key}
+                    className={`credits-mkt-btn ${selectedMarket === mkt.key ? 'credits-mkt-btn--active' : ''}`}
+                    style={selectedMarket === mkt.key ? { borderColor: mkt.color, boxShadow: `0 0 0 3px ${mkt.color}33` } : {}}
+                    onClick={() => handleMarketSelect(mkt)}
+                  >
+                    <span className="credits-mkt-icon">{mkt.icon}</span>
+                    <span className="credits-mkt-label">{mkt.label}</span>
+                    <span className="credits-mkt-price" style={{ color: mkt.color }}>
+                      ₹{mkt.priceInr.toLocaleString('en-IN')}/t
+                    </span>
+                  </button>
+                ))}
+              </div>
+
+              {/* ── KPI Row ───────────────────────────────────────────── */}
+              <div className="credits-kpi-grid">
+                <div className="credits-kpi-card">
+                  <div className="credits-kpi-icon">🏭</div>
+                  <div className="credits-kpi-label">Annual Emissions</div>
+                  <div className="credits-kpi-value" style={{ color: '#ef4444' }}>
+                    {annualEmTco.toFixed(2)}
+                    <span className="credits-kpi-unit"> tCO₂e / yr</span>
+                  </div>
+                </div>
+                <div className="credits-kpi-card">
+                  <div className="credits-kpi-icon">🌳</div>
+                  <div className="credits-kpi-label">Annual Sequestration</div>
+                  <div className="credits-kpi-value" style={{ color: '#10b981' }}>
+                    {annualSinkTco.toFixed(2)}
+                    <span className="credits-kpi-unit"> tCO₂e / yr</span>
+                  </div>
+                </div>
+                <div className="credits-kpi-card">
+                  <div className="credits-kpi-icon">⚖️</div>
+                  <div className="credits-kpi-label">Net Position (Annual)</div>
+                  <div className="credits-kpi-value" style={{ color: isNetPositive ? '#10b981' : '#f59e0b' }}>
+                    {isNetPositive ? '+' : '-'}{Math.abs(annualNetGap).toFixed(2)}
+                    <span className="credits-kpi-unit"> tCO₂e</span>
+                  </div>
+                </div>
+                <div className="credits-kpi-card">
+                  <div className="credits-kpi-icon">♻️</div>
+                  <div className="credits-kpi-label">Offset Coverage</div>
+                  <div className="credits-kpi-value" style={{ color: '#8b5cf6' }}>
+                    {reductionPct}%
+                    <span className="credits-kpi-unit"> sinks/emissions</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* ── Main Result Cards ─────────────────────────────────── */}
+              <div className="credits-result-grid">
+                {isNetPositive ? (
+                  /* ── EARNING ── */
+                  <div className="credits-result-card credits-result-card--earn">
+                    <div className="credits-result-glow credits-result-glow--earn" />
+                    <div className="credits-result-top">
+                      <span className="credits-result-emoji">🏆</span>
+                      <div>
+                        <div className="credits-result-heading">Credits Available to Sell</div>
+                        <div className="credits-result-sub">Your mine is net carbon-negative — congrats!</div>
+                      </div>
+                    </div>
+                    <div className="credits-result-amount">
+                      {creditsEarned.toFixed(3)}
+                      <span className="credits-result-unit"> tCO₂e credits</span>
+                    </div>
+                    <div className="credits-result-divider" />
+                    <div className="credits-result-valuation">
+                      <div className="credits-val-row">
+                        <span>Market value (INR)</span>
+                        <strong style={{ color: '#10b981' }}>₹{creditValueInr.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</strong>
+                      </div>
+                      <div className="credits-val-row">
+                        <span>Market value (USD)</span>
+                        <strong style={{ color: '#10b981' }}>${creditValueUsd.toLocaleString('en-US', { maximumFractionDigits: 0 })}</strong>
+                      </div>
+                      <div className="credits-val-row">
+                        <span>Price per tonne</span>
+                        <strong>₹{creditPriceInr.toLocaleString('en-IN')} / ${creditPriceUsd}</strong>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  /* ── BUYING ── */
+                  <div className="credits-result-card credits-result-card--buy">
+                    <div className="credits-result-glow credits-result-glow--buy" />
+                    <div className="credits-result-top">
+                      <span className="credits-result-emoji">📉</span>
+                      <div>
+                        <div className="credits-result-heading">Credits Needed to Offset</div>
+                        <div className="credits-result-sub">Shortfall to reach carbon neutrality for the year</div>
+                      </div>
+                    </div>
+                    <div className="credits-result-amount" style={{ color: '#f59e0b' }}>
+                      {creditsNeeded.toFixed(3)}
+                      <span className="credits-result-unit"> tCO₂e deficit</span>
+                    </div>
+                    <div className="credits-result-divider" />
+                    <div className="credits-result-valuation">
+                      <div className="credits-val-row">
+                        <span>Offset cost (INR)</span>
+                        <strong style={{ color: '#f59e0b' }}>₹{offsetCostInr.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</strong>
+                      </div>
+                      <div className="credits-val-row">
+                        <span>Offset cost (USD)</span>
+                        <strong style={{ color: '#f59e0b' }}>${offsetCostUsd.toLocaleString('en-US', { maximumFractionDigits: 0 })}</strong>
+                      </div>
+                      <div className="credits-val-row">
+                        <span>Price per tonne</span>
+                        <strong>₹{creditPriceInr.toLocaleString('en-IN')} / ${creditPriceUsd}</strong>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* ── Custom Price Editor ── */}
+                <div className="credits-price-card">
+                  <div className="credits-result-glow credits-result-glow--purple" />
+                  <h3 className="credits-price-title">🎛️ Custom Market Price</h3>
+                  <p className="credits-price-hint">Override the price per tonne to model different market scenarios.</p>
+                  <div className="credits-price-row">
+                    <label htmlFor="credit-inr">Price (₹ / tCO₂e)</label>
+                    <input
+                      id="credit-inr"
+                      type="number"
+                      min="0"
+                      value={creditPriceInr}
+                      onChange={(e) => setCreditPriceInr(Number(e.target.value) || 0)}
+                      className="credits-price-input"
+                    />
+                  </div>
+                  <div className="credits-price-row">
+                    <label htmlFor="credit-usd">Price ($ / tCO₂e)</label>
+                    <input
+                      id="credit-usd"
+                      type="number"
+                      min="0"
+                      value={creditPriceUsd}
+                      onChange={(e) => setCreditPriceUsd(Number(e.target.value) || 0)}
+                      className="credits-price-input"
+                    />
+                  </div>
+                  <div className="credits-price-divider" />
+                  <div className="credits-price-summary">
+                    <div className="credits-val-row">
+                      <span>Scenario value (INR)</span>
+                      <strong style={{ color: isNetPositive ? '#10b981' : '#f59e0b' }}>
+                        {isNetPositive
+                          ? `₹${(creditsEarned * creditPriceInr).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`
+                          : `-₹${(creditsNeeded  * creditPriceInr).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`
+                        }
+                      </strong>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* ── Breakdown Table ───────────────────────────────────── */}
+              <div className="credits-breakdown-card">
+                <h3 className="credits-breakdown-title">📊 Emissions vs Sinks Breakdown (Daily → Annual)</h3>
+                <div className="credits-breakdown-table">
+                  <div className="cb-row cb-row--header">
+                    <span>Source</span>
+                    <span>Daily (tCO₂e)</span>
+                    <span>Annual (tCO₂e)</span>
+                    <span>Market Value</span>
+                  </div>
+                  {[
+                    { label: '🔥 Diesel', val: currentEmissions.breakdown.diesel / 1000 },
+                    { label: '⛽ Petrol', val: currentEmissions.breakdown.petrol / 1000 },
+                    { label: '⚡ Electricity', val: currentEmissions.breakdown.electricity / 1000 },
+                    { label: '💨 Methane', val: currentEmissions.breakdown.methane / 1000 },
+                    { label: '💥 Explosives', val: currentEmissions.breakdown.explosives / 1000 },
+                  ].map(row => (
+                    <div key={row.label} className="cb-row cb-row--emission">
+                      <span>{row.label}</span>
+                      <span>{row.val.toFixed(4)}</span>
+                      <span>{(row.val * 365).toFixed(2)}</span>
+                      <span style={{ color: '#ef4444' }}>
+                        ₹{(row.val * 365 * creditPriceInr).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+                      </span>
+                    </div>
+                  ))}
+                  <div className="cb-row cb-row--sink">
+                    <span>🌳 Carbon Sinks</span>
+                    <span style={{ color: '#10b981' }}>{totalSinksTco.toFixed(4)}</span>
+                    <span style={{ color: '#10b981' }}>{annualSinkTco.toFixed(2)}</span>
+                    <span style={{ color: '#10b981' }}>
+                      -₹{(annualSinkTco * creditPriceInr).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+                    </span>
+                  </div>
+                  <div className="cb-row cb-row--total">
+                    <span><strong>Net Position</strong></span>
+                    <span><strong style={{ color: isNetPositive ? '#10b981' : '#f59e0b' }}>{netGapTco.toFixed(4)}</strong></span>
+                    <span><strong style={{ color: isNetPositive ? '#10b981' : '#f59e0b' }}>{annualNetGap.toFixed(2)}</strong></span>
+                    <span><strong style={{ color: isNetPositive ? '#10b981' : '#f59e0b' }}>
+                      {isNetPositive
+                        ? `+₹${(creditsEarned * creditPriceInr).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`
+                        : `-₹${(creditsNeeded * creditPriceInr).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`
+                      }
+                    </strong></span>
+                  </div>
+                </div>
+              </div>
+
+              {/* ── Disclaimer ───────────────────────────────────────── */}
+              <p className="credits-disclaimer">
+                ⚠️ Values are illustrative and based on daily activity inputs. Actual carbon credit valuations
+                require third-party verification per VCS / Gold Standard / BEE India norms.
+              </p>
+            </div>
+          );
+        })()}
+
       </main>
     </div>
+        </>
+      )}
+    </MineAuthGate>
   );
 }

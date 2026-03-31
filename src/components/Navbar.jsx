@@ -1,38 +1,51 @@
-import { Link, NavLink } from 'react-router-dom'
+import { useMineAuth } from '../context/MineAuthContext'
 import './Navbar.css'
 
-const linkClass = ({ isActive }) => `nav__link${isActive ? ' nav__link--active' : ''}`
-
 export default function Navbar() {
+  const auth    = useMineAuth()
+  const mineId  = auth?.mineId  ?? null
+  const signOut = auth?.signOut ?? null
+
   return (
     <header className="nav">
       <div className="nav__inner">
-        <Link to="/" className="nav__brand">
-          Coal carbon footprint
-        </Link>
-        <nav className="nav__links" aria-label="Main">
-          <NavLink to="/" className={linkClass} end>
-            Home
-          </NavLink>
-          <NavLink to="/activity/create" className={linkClass}>
-            Create
-          </NavLink>
-          <NavLink to="/activity/update" className={linkClass}>
-            Update
-          </NavLink>
-          <NavLink to="/emissions" className={linkClass}>
-            Emissions
-          </NavLink>
-          <NavLink to="/pathways" className={linkClass}>
-            Pathways
-          </NavLink>
-          <NavLink to="/insights" className={linkClass}>
-            Insights
-          </NavLink>
-          <NavLink to="/settings" className={linkClass}>
-            Mine setup
-          </NavLink>
-        </nav>
+
+        {/* ── Brand ─────────────────────────────────────────────── */}
+        <div className="nav__brand">
+          <span className="nav__brand-icon">⛏️</span>
+          <span>IndianCoal™ Zero</span>
+        </div>
+
+        {/* ── Auth section (right side) ─────────────────────────── */}
+        <div className="nav__auth">
+          {mineId ? (
+            /* ─── Signed In ─── */
+            <>
+              <div className="nav__mine-badge">
+                <span className="nav__mine-dot" aria-hidden="true" />
+                <span className="nav__mine-id">
+                  <span className="nav__mine-label">MINE</span>
+                  {mineId}
+                </span>
+              </div>
+              <button
+                id="nav-signout-btn"
+                className="nav__btn nav__btn--signout"
+                onClick={signOut}
+                title="Sign out of your mine account"
+              >
+                Sign Out
+              </button>
+            </>
+          ) : (
+            /* ─── Signed Out ─── */
+            <>
+              <span className="nav__guest-label">Not signed in</span>
+              <span className="nav__badge-guest">Sign in below ↓</span>
+            </>
+          )}
+        </div>
+
       </div>
     </header>
   )
