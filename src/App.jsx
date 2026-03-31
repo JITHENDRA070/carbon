@@ -6,6 +6,7 @@ import MiningDashboard from './components/MiningDashboard';
 import CarbonSinkModule from './components/CarbonSinkModule';
 import MineAuthGate from './components/MineAuthGate';
 import Navbar from './components/Navbar';
+import { FaLeaf, FaChartBar, FaSeedling, FaGlobe, FaRegEdit, FaSlidersH, FaCoins, FaFire, FaUsers, FaTree, FaBalanceScale, FaTrophy, FaExclamationTriangle, FaIndustry, FaRecycle, FaChartLine, FaGasPump, FaBolt, FaWind, FaBomb } from "react-icons/fa";
 
 const MOCK_HISTORICAL_DATA = Array.from({ length: 30 }, (_, i) => {
   const day = i + 1;
@@ -39,10 +40,7 @@ const PIE_COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6'];
 export default function CarbonDashboard() {
   const [activeTab, setActiveTab] = useState('analytics');
   const [isSaving, setIsSaving] = useState(false);
-  // Modal state for upsert confirmation
-  const [upsertModal, setUpsertModal] = useState(null); // null | { existingRecord, newData }
-
-  // Form State (mineId comes from auth; do not let users type it)
+  const [upsertModal, setUpsertModal] = useState(null);
   const [formData, setFormData] = useState({
     workers: 150,
     dieselLiters: 1200,
@@ -57,21 +55,15 @@ export default function CarbonDashboard() {
     treesPlanted: 5000,
     areaHectares: 120
   });
-
-  // Simulation State
   const [simMultipliers, setSimMultipliers] = useState({
     diesel: 1,
     electricity: 1,
     methaneCapture: 0,
     newTrees: 0
   });
-
-  // Carbon Credit Market State
-  const [creditPriceInr, setCreditPriceInr] = useState(850); // INR per tCO₂e (India VCM reference)
-  const [creditPriceUsd, setCreditPriceUsd] = useState(10);  // USD reference
-  const [selectedMarket, setSelectedMarket] = useState('vcm'); // 'vcm' | 'compliance'
-
-  // Calculate Current Metrics
+  const [creditPriceInr, setCreditPriceInr] = useState(850);
+  const [creditPriceUsd, setCreditPriceUsd] = useState(10);
+  const [selectedMarket, setSelectedMarket] = useState('vcm');
   const currentEmissions = useMemo(() => {
     return calculateEmissions({
       ...formData,
@@ -107,9 +99,6 @@ export default function CarbonDashboard() {
       [name]: (parseFloat(value) || 0)
     }));
   };
-
-  // Build exact row payload matching the `mining` table columns.
-  // created_at is intentionally OMITTED — Supabase auto-inserts it via DEFAULT now().
   const buildMiningRecord = (mineId) => ({
     mineid: mineId,
     workers: formData.workers,
@@ -121,8 +110,6 @@ export default function CarbonDashboard() {
   });
 
   const today = new Date().toISOString().split('T')[0];
-
-  // Check if a record for this mine already exists today
   const checkExistingRecord = async (mineId) => {
     const { data, error } = await supabase
       .from('mining')
@@ -132,7 +119,7 @@ export default function CarbonDashboard() {
       .lte('created_at', `${today}T23:59:59.999Z`)
       .maybeSingle();
     if (error) throw error;
-    return data; // null if no record found
+    return data;
   };
 
   const handleSaveLog = async (mineId) => {
@@ -140,20 +127,18 @@ export default function CarbonDashboard() {
       setIsSaving(true);
       const existing = await checkExistingRecord(mineId);
       if (existing) {
-        // Duplicate — show update confirmation modal
         setUpsertModal({ existingRecord: existing, newData: buildMiningRecord(mineId), mineId });
       } else {
-        // Fresh INSERT — created_at auto-set by Supabase to now()
         const { error } = await supabase
           .from('mining')
           .insert(buildMiningRecord(mineId));
         if (error) throw error;
-        alert(`✅ Log saved to mining table!\nMine: ${mineId}\nTime: ${new Date().toISOString()}`);
+        alert(` Log saved to mining table!\nMine: ${mineId}\nTime: ${new Date().toISOString()}`);
         setActiveTab('dashboard');
       }
     } catch (err) {
       console.error('[mining] INSERT error:', err);
-      alert(`❌ Error saving log: ${err.message}`);
+      alert(` Error saving log: ${err.message}`);
     } finally {
       setIsSaving(false);
     }
@@ -164,7 +149,6 @@ export default function CarbonDashboard() {
       setIsSaving(true);
       const mineId = upsertModal?.mineId
       if (!mineId) throw new Error('Missing mine id for update.')
-      // UPDATE matching row by mineid for today's date range
       const { error } = await supabase
         .from('mining')
         .update(buildMiningRecord(mineId))
@@ -173,11 +157,11 @@ export default function CarbonDashboard() {
         .lte('created_at', `${today}T23:59:59.999Z`);
       if (error) throw error;
       setUpsertModal(null);
-      alert(`🔄 Record updated in mining table!\nMine: ${mineId}`);
+      alert(` Record updated in mining table!\nMine: ${mineId}`);
       setActiveTab('dashboard');
     } catch (err) {
       console.error('[mining] UPDATE error:', err);
-      alert(`❌ Error updating record: ${err.message}`);
+      alert(` Error updating record: ${err.message}`);
     } finally {
       setIsSaving(false);
     }
@@ -198,22 +182,22 @@ export default function CarbonDashboard() {
         <>
         <Navbar />
         <div className="dashboard-container">
-      {/* Sidebar */}
+      
       <aside className="sidebar">
         <div className="brand">
-          <span style={{ fontSize: '2rem' }}>🍃</span> IndianCoal™ Zero
+          <span style={{ fontSize: '2rem' }}><FaLeaf /></span> IndianCoal™ Zero
         </div>
         <nav className="nav-links">
-          <SidebarItem id="analytics" label="Emissions Analytics" icon="📊" />
-          <SidebarItem id="sink" label="Carbon Sink & Gap" icon="🌿" />
-          <SidebarItem id="overview" label="Overview" icon="🌍" />
-          <SidebarItem id="data-entry" label="Daily Data Logs" icon="📝" />
-          <SidebarItem id="simulation" label="Simulation & Strategies" icon="🎛️" />
-          <SidebarItem id="credits" label="Carbon Credits Market" icon="💰" />
+          <SidebarItem id="analytics" label="Emissions Analytics" icon={<FaChartBar />} />
+          <SidebarItem id="sink" label="Carbon Sink & Gap" icon={<FaSeedling />} />
+          <SidebarItem id="overview" label="Overview" icon={<FaGlobe />} />
+          <SidebarItem id="data-entry" label="Daily Data Logs" icon={<FaRegEdit />} />
+          <SidebarItem id="simulation" label="Simulation & Strategies" icon={<FaSlidersH />} />
+          <SidebarItem id="credits" label="Carbon Credits Market" icon={<FaCoins />} />
         </nav>
       </aside>
 
-      {/* Main Content */}
+      
       <main className="main-content">
         <header className="header">
           <div>
@@ -226,18 +210,18 @@ export default function CarbonDashboard() {
           </div>
         </header>
 
-        {/* === EMISSIONS ANALYTICS (Supabase-powered) === */}
+        
         {activeTab === 'analytics' && (
           <div className="fade-in">
             <MiningDashboard mineId={mineId} />
           </div>
         )}
 
-        {/* === CARBON SINK & GAP ANALYSIS === */}
+        
         {activeTab === 'sink' && (
           <div className="fade-in">
             <div style={{ marginBottom: '2rem' }}>
-              <h2>🌿 Carbon Sink & Gap Analysis</h2>
+              <h2><FaSeedling /> Carbon Sink & Gap Analysis</h2>
               <p style={{ color: 'var(--text-muted)', marginTop: '0.25rem' }}>
                 Estimate CO₂ absorption from plantations, calculate your carbon gap, and see credits earned.
               </p>
@@ -246,13 +230,13 @@ export default function CarbonDashboard() {
           </div>
         )}
 
-        {/* === OVERVIEW (existing static demo) === */}
+        
         {activeTab === 'overview' && (
           <div className="fade-in">
-            {/* KPI Cards */}
+            
             <div className="kpi-grid">
               <div className="kpi-card">
-                <div className="kpi-title">🔥 Total Daily Emissions</div>
+                <div className="kpi-title"><FaFire /> Total Daily Emissions</div>
                 <div className="kpi-value" style={{ color: 'var(--accent-red)' }}>
                   {formatNumber(currentEmissions.totalEmissions)} <span style={{ fontSize: '1rem' }}>kg CO₂e</span>
                 </div>
@@ -260,7 +244,7 @@ export default function CarbonDashboard() {
               </div>
 
               <div className="kpi-card">
-                <div className="kpi-title">👥 Per Capita Emission</div>
+                <div className="kpi-title"><FaUsers /> Per Capita Emission</div>
                 <div className="kpi-value">
                   {formatNumber(currentEmissions.perCapita)} <span style={{ fontSize: '1rem' }}>kg/worker</span>
                 </div>
@@ -268,7 +252,7 @@ export default function CarbonDashboard() {
               </div>
 
               <div className="kpi-card">
-                <div className="kpi-title">🌲 Total Carbon Sinks</div>
+                <div className="kpi-title"><FaTree /> Total Carbon Sinks</div>
                 <div className="kpi-value" style={{ color: 'var(--accent-green)' }}>
                   {formatNumber(currentSinks)} <span style={{ fontSize: '1rem' }}>kg CO₂/day</span>
                 </div>
@@ -276,7 +260,7 @@ export default function CarbonDashboard() {
               </div>
 
               <div className="kpi-card">
-                <div className="kpi-title">{gapAnalysis.gap > 0 ? '⚖️ Carbon Gap' : '🏆 Carbon Credits'}</div>
+                <div className="kpi-title">{gapAnalysis.gap > 0 ? <><FaBalanceScale /> Carbon Gap</> : <><FaTrophy /> Carbon Credits</>}</div>
                 <div className="kpi-value" style={{ color: gapAnalysis.gap > 0 ? 'var(--accent-orange)' : 'var(--accent-green)' }}>
                   {gapAnalysis.gap > 0 ? formatNumber(gapAnalysis.gap) : formatNumber(gapAnalysis.creditsEarned)}
                   <span style={{ fontSize: '1rem' }}>{gapAnalysis.gap > 0 ? ' kg to offset' : ' credits'}</span>
@@ -285,7 +269,7 @@ export default function CarbonDashboard() {
               </div>
             </div>
 
-            {/* Charts Row */}
+            
             <div className="charts-grid">
               <div className="chart-card">
                 <div className="chart-header">
@@ -395,10 +379,10 @@ export default function CarbonDashboard() {
               disabled={isSaving}
               style={{ opacity: isSaving ? 0.7 : 1, cursor: isSaving ? 'not-allowed' : 'pointer' }}
             >
-              {isSaving ? '⏳ Saving…' : 'Save Log to Database'}
+              {isSaving ? ' Saving…' : 'Save Log to Database'}
             </button>
 
-            {/* Upsert Confirmation Modal */}
+            
             {upsertModal && (
               <div style={{
                 position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)',
@@ -410,7 +394,7 @@ export default function CarbonDashboard() {
                   padding: '2rem', maxWidth: '480px', width: '90%',
                   boxShadow: '0 20px 60px rgba(0,0,0,0.5)'
                 }}>
-                  <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>⚠️</div>
+                  <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}></div>
                   <h3 style={{ marginBottom: '0.75rem' }}>Duplicate Record Detected</h3>
                   <p style={{ color: 'var(--text-muted)', marginBottom: '1.5rem', lineHeight: 1.6 }}>
                     A log for Mine ID <strong style={{ color: 'var(--accent-orange)' }}>"{upsertModal.existingRecord.mineid}"</strong> already
@@ -419,7 +403,7 @@ export default function CarbonDashboard() {
                   </p>
                   <div style={{ display: 'flex', gap: '1rem' }}>
                     <button className="btn-primary" onClick={handleConfirmUpdate} disabled={isSaving} style={{ opacity: isSaving ? 0.7 : 1 }}>
-                      {isSaving ? '⏳ Updating…' : 'Update Existing Record'}
+                      {isSaving ? ' Updating…' : 'Update Existing Record'}
                     </button>
                     <button className="btn-outline" onClick={() => setUpsertModal(null)} disabled={isSaving}>Cancel</button>
                   </div>
@@ -480,7 +464,7 @@ export default function CarbonDashboard() {
                 </div>
                 {gapAnalysis.gap <= 0 && (
                   <div style={{ color: 'var(--accent-green)', fontWeight: 'bold', fontSize: '1.2rem' }}>
-                    🎉 Net Zero Achieved! 💰 {formatNumber(gapAnalysis.creditsEarned)} Credits Earned!
+                     Net Zero Achieved! <FaCoins /> {formatNumber(gapAnalysis.creditsEarned)} Credits Earned!
                   </div>
                 )}
               </div>
@@ -488,17 +472,16 @@ export default function CarbonDashboard() {
           </div>
         )}
 
-        {/* === CARBON CREDITS MARKET === */}
+        
         {activeTab === 'credits' && (() => {
-          // ── Live calculations ──────────────────────────────────────────
-          const INR_USD = 0.012; // approximate
-          const totalEmKg  = currentEmissions.totalEmissions;   // kg CO₂e / day
-          const totalEmTco = totalEmKg / 1000;                  // tCO₂e / day
-          const totalSinksTco = currentSinks / 1000;            // tCO₂e / day
-          const netGapTco  = totalEmTco - totalSinksTco;        // positive = deficit
+          const INR_USD = 0.012;
+          const totalEmKg  = currentEmissions.totalEmissions;
+          const totalEmTco = totalEmKg / 1000;
+          const totalSinksTco = currentSinks / 1000;
+          const netGapTco  = totalEmTco - totalSinksTco;
           const annualEmTco  = totalEmTco  * 365;
           const annualSinkTco = totalSinksTco * 365;
-          const annualNetGap  = netGapTco * 365;                // annual net
+          const annualNetGap  = netGapTco * 365;
           const creditsEarned = annualNetGap < 0 ? Math.abs(annualNetGap) : 0;
           const creditsNeeded = annualNetGap > 0 ? annualNetGap : 0;
           const creditValueInr = creditsEarned * creditPriceInr;
@@ -506,17 +489,13 @@ export default function CarbonDashboard() {
           const offsetCostInr  = creditsNeeded * creditPriceInr;
           const offsetCostUsd  = creditsNeeded * creditPriceUsd;
           const isNetPositive  = annualNetGap <= 0;
-
-          // Reduction % vs unadjusted baseline
           const reductionPct = annualEmTco > 0
             ? Math.min(100, (annualSinkTco / annualEmTco) * 100).toFixed(1)
             : '0.0';
-
-          // Market tier prices (illustrative)
           const markets = [
-            { key: 'vcm',        label: 'Voluntary Carbon Market',   priceInr: 850,  priceUsd: 10,  color: '#10b981', icon: '🌿' },
-            { key: 'compliance', label: 'Compliance / Cap-and-Trade', priceInr: 2125, priceUsd: 25,  color: '#3b82f6', icon: '⚖️' },
-            { key: 'premium',    label: 'Premium Quality Credits',   priceInr: 5100, priceUsd: 60,  color: '#f59e0b', icon: '🏆' },
+            { key: 'vcm',        label: 'Voluntary Carbon Market',   priceInr: 850,  priceUsd: 10,  color: '#10b981', icon: <FaSeedling /> },
+            { key: 'compliance', label: 'Compliance / Cap-and-Trade', priceInr: 2125, priceUsd: 25,  color: '#3b82f6', icon: <FaBalanceScale /> },
+            { key: 'premium',    label: 'Premium Quality Credits',   priceInr: 5100, priceUsd: 60,  color: '#f59e0b', icon: <FaTrophy /> },
           ];
 
           const handleMarketSelect = (mkt) => {
@@ -527,20 +506,20 @@ export default function CarbonDashboard() {
 
           return (
             <div className="credits-market fade-in">
-              {/* ── Header ────────────────────────────────────────────── */}
+              
               <div className="credits-header">
                 <div>
-                  <h2 className="credits-title">💰 Carbon Credit Market</h2>
+                  <h2 className="credits-title"><FaCoins /> Carbon Credit Market</h2>
                   <p className="credits-subtitle">
                     Real-time valuation of your mine's carbon position based on daily activity data.
                   </p>
                 </div>
                 <div className={`credits-status-badge ${isNetPositive ? 'credits-status-badge--earn' : 'credits-status-badge--buy'}`}>
-                  {isNetPositive ? '✅ Credit Earner' : '⚠️ Offset Buyer'}
+                  {isNetPositive ? ' Credit Earner' : ' Offset Buyer'}
                 </div>
               </div>
 
-              {/* ── Market Selector ───────────────────────────────────── */}
+              
               <div className="credits-market-tabs">
                 {markets.map(mkt => (
                   <button
@@ -558,10 +537,10 @@ export default function CarbonDashboard() {
                 ))}
               </div>
 
-              {/* ── KPI Row ───────────────────────────────────────────── */}
+              
               <div className="credits-kpi-grid">
                 <div className="credits-kpi-card">
-                  <div className="credits-kpi-icon">🏭</div>
+                  <div className="credits-kpi-icon"><FaIndustry /></div>
                   <div className="credits-kpi-label">Annual Emissions</div>
                   <div className="credits-kpi-value" style={{ color: '#ef4444' }}>
                     {annualEmTco.toFixed(2)}
@@ -577,7 +556,7 @@ export default function CarbonDashboard() {
                   </div>
                 </div>
                 <div className="credits-kpi-card">
-                  <div className="credits-kpi-icon">⚖️</div>
+                  <div className="credits-kpi-icon"><FaBalanceScale /></div>
                   <div className="credits-kpi-label">Net Position (Annual)</div>
                   <div className="credits-kpi-value" style={{ color: isNetPositive ? '#10b981' : '#f59e0b' }}>
                     {isNetPositive ? '+' : '-'}{Math.abs(annualNetGap).toFixed(2)}
@@ -585,7 +564,7 @@ export default function CarbonDashboard() {
                   </div>
                 </div>
                 <div className="credits-kpi-card">
-                  <div className="credits-kpi-icon">♻️</div>
+                  <div className="credits-kpi-icon"><FaRecycle /></div>
                   <div className="credits-kpi-label">Offset Coverage</div>
                   <div className="credits-kpi-value" style={{ color: '#8b5cf6' }}>
                     {reductionPct}%
@@ -594,14 +573,14 @@ export default function CarbonDashboard() {
                 </div>
               </div>
 
-              {/* ── Main Result Cards ─────────────────────────────────── */}
+              
               <div className="credits-result-grid">
                 {isNetPositive ? (
-                  /* ── EARNING ── */
+                  
                   <div className="credits-result-card credits-result-card--earn">
                     <div className="credits-result-glow credits-result-glow--earn" />
                     <div className="credits-result-top">
-                      <span className="credits-result-emoji">🏆</span>
+                      <span className="credits-result-emoji"><FaTrophy /></span>
                       <div>
                         <div className="credits-result-heading">Credits Available to Sell</div>
                         <div className="credits-result-sub">Your mine is net carbon-negative — congrats!</div>
@@ -628,11 +607,11 @@ export default function CarbonDashboard() {
                     </div>
                   </div>
                 ) : (
-                  /* ── BUYING ── */
+                  
                   <div className="credits-result-card credits-result-card--buy">
                     <div className="credits-result-glow credits-result-glow--buy" />
                     <div className="credits-result-top">
-                      <span className="credits-result-emoji">📉</span>
+                      <span className="credits-result-emoji"><FaChartLine /></span>
                       <div>
                         <div className="credits-result-heading">Credits Needed to Offset</div>
                         <div className="credits-result-sub">Shortfall to reach carbon neutrality for the year</div>
@@ -660,10 +639,10 @@ export default function CarbonDashboard() {
                   </div>
                 )}
 
-                {/* ── Custom Price Editor ── */}
+                
                 <div className="credits-price-card">
                   <div className="credits-result-glow credits-result-glow--purple" />
-                  <h3 className="credits-price-title">🎛️ Custom Market Price</h3>
+                  <h3 className="credits-price-title"><FaSlidersH /> Custom Market Price</h3>
                   <p className="credits-price-hint">Override the price per tonne to model different market scenarios.</p>
                   <div className="credits-price-row">
                     <label htmlFor="credit-inr">Price (₹ / tCO₂e)</label>
@@ -702,9 +681,9 @@ export default function CarbonDashboard() {
                 </div>
               </div>
 
-              {/* ── Breakdown Table ───────────────────────────────────── */}
+              
               <div className="credits-breakdown-card">
-                <h3 className="credits-breakdown-title">📊 Emissions vs Sinks Breakdown (Daily → Annual)</h3>
+                <h3 className="credits-breakdown-title"><FaChartBar /> Emissions vs Sinks Breakdown (Daily → Annual)</h3>
                 <div className="credits-breakdown-table">
                   <div className="cb-row cb-row--header">
                     <span>Source</span>
@@ -713,11 +692,11 @@ export default function CarbonDashboard() {
                     <span>Market Value</span>
                   </div>
                   {[
-                    { label: '🔥 Diesel', val: currentEmissions.breakdown.diesel / 1000 },
-                    { label: '⛽ Petrol', val: currentEmissions.breakdown.petrol / 1000 },
-                    { label: '⚡ Electricity', val: currentEmissions.breakdown.electricity / 1000 },
-                    { label: '💨 Methane', val: currentEmissions.breakdown.methane / 1000 },
-                    { label: '💥 Explosives', val: currentEmissions.breakdown.explosives / 1000 },
+                    { label: <><FaFire /> Diesel</>, val: currentEmissions.breakdown.diesel / 1000 },
+                    { label: <><FaGasPump /> Petrol</>, val: currentEmissions.breakdown.petrol / 1000 },
+                    { label: <><FaBolt /> Electricity</>, val: currentEmissions.breakdown.electricity / 1000 },
+                    { label: <><FaWind /> Methane</>, val: currentEmissions.breakdown.methane / 1000 },
+                    { label: <><FaBomb /> Explosives</>, val: currentEmissions.breakdown.explosives / 1000 },
                   ].map(row => (
                     <div key={row.label} className="cb-row cb-row--emission">
                       <span>{row.label}</span>
@@ -750,9 +729,9 @@ export default function CarbonDashboard() {
                 </div>
               </div>
 
-              {/* ── Disclaimer ───────────────────────────────────────── */}
+              
               <p className="credits-disclaimer">
-                ⚠️ Values are illustrative and based on daily activity inputs. Actual carbon credit valuations
+                <FaExclamationTriangle /> Values are illustrative and based on daily activity inputs. Actual carbon credit valuations
                 require third-party verification per VCS / Gold Standard / BEE India norms.
               </p>
             </div>

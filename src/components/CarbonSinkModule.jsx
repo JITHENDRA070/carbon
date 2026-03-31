@@ -3,22 +3,18 @@ import {
   RadialBarChart, RadialBar, PolarAngleAxis,
   ResponsiveContainer, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid, Legend
 } from 'recharts';
+import { FaChartBar, FaSeedling, FaCoins, FaFire, FaTree, FaBalanceScale, FaTrophy } from "react-icons/fa";
 
-// ─── Constants ────────────────────────────────────────────────────────────────
-const TREE_ABSORPTION_YR    = 21;          // kg CO₂ / tree / year
-const HECTARE_ABSORPTION_YR = 10_000;      // kg CO₂ / hectare / year
-const CARBON_CREDIT_TONNE   = 1_000;       // 1 credit = 1 tonne CO₂e reduced
-const CREDIT_PRICE_USD      = 15;          // USD per carbon credit (avg voluntary market)
-const USD_TO_INR            = 83.5;        // approx exchange rate
+const TREE_ABSORPTION_YR    = 21;
+const HECTARE_ABSORPTION_YR = 10_000;
+const CARBON_CREDIT_TONNE   = 1_000;
+const CREDIT_PRICE_USD      = 15;
+const USD_TO_INR            = 83.5;
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
 const fmt     = (n, d = 0) => new Intl.NumberFormat('en-IN', { maximumFractionDigits: d }).format(n);
 const fmtCurr = (n, sym = '₹') => `${sym} ${fmt(Math.abs(n), 0)}`;
-
-// ─── Tooltip style ───────────────────────────────────────────────────────────
 const tipStyle = { backgroundColor: '#1e293b', border: 'none', borderRadius: '8px', color: '#fff' };
 
-// ─── KPI Card ────────────────────────────────────────────────────────────────
 function StatCard({ title, value, unit, color = 'var(--text-main)', sub }) {
   return (
     <div className="kpi-card">
@@ -31,44 +27,30 @@ function StatCard({ title, value, unit, color = 'var(--text-main)', sub }) {
   );
 }
 
-// ─── Main Component ───────────────────────────────────────────────────────────
 export default function CarbonSinkModule() {
-  // Emission inputs
-  const [totalEmissions, setTotalEmissions] = useState(15000); // kg CO₂e / day (editable)
-
-  // Sink inputs
+  const [totalEmissions, setTotalEmissions] = useState(15000);
   const [trees,    setTrees]    = useState(5000);
   const [hectares, setHectares] = useState(120);
-
-  // Period selector
-  const [period, setPeriod] = useState('daily'); // 'daily' | 'monthly' | 'yearly'
+  const [period, setPeriod] = useState('daily');
 
   const periodFactor = { daily: 1 / 365, monthly: 1 / 12, yearly: 1 };
-
-  // ── Derived calculations ───────────────────────────────────────────────────
   const result = useMemo(() => {
     const pf = periodFactor[period];
 
-    const treeSink     = trees    * TREE_ABSORPTION_YR    * pf; // kg CO₂
+    const treeSink     = trees    * TREE_ABSORPTION_YR    * pf;
     const hectareSink  = hectares * HECTARE_ABSORPTION_YR * pf;
     const totalSink    = treeSink + hectareSink;
-
-    // Scale emissions to chosen period
     const scaledEmissions = period === 'daily'
       ? totalEmissions
       : period === 'monthly'
         ? totalEmissions * 30
         : totalEmissions * 365;
 
-    const gap            = scaledEmissions - totalSink;         // positive = deficit
+    const gap            = scaledEmissions - totalSink;
     const isNeutral      = gap <= 0;
     const surplusOrGap   = Math.abs(gap);
-
-    // How many more trees / hectares to close the gap?
     const treesNeeded    = isNeutral ? 0 : gap / (TREE_ABSORPTION_YR * pf);
     const hectaresNeeded = isNeutral ? 0 : gap / (HECTARE_ABSORPTION_YR * pf);
-
-    // Carbon credits: 1 credit per tonne offset/reduced
     const creditsEarned   = isNeutral ? surplusOrGap / CARBON_CREDIT_TONNE : 0;
     const marketValueUSD  = creditsEarned * CREDIT_PRICE_USD;
     const marketValueINR  = marketValueUSD * USD_TO_INR;
@@ -84,23 +66,18 @@ export default function CarbonSinkModule() {
     };
   }, [trees, hectares, totalEmissions, period]);
 
-  // ── Bar chart data ─────────────────────────────────────────────────────────
   const barData = [
     { name: 'Emissions', value: Math.round(result.scaledEmissions), fill: '#ef4444' },
     { name: 'Tree Sink', value: Math.round(result.treeSink),        fill: '#10b981' },
     { name: 'Area Sink', value: Math.round(result.hectareSink),     fill: '#3b82f6' },
     { name: 'Gap',       value: Math.round(Math.max(0, result.gap)),fill: '#f59e0b' },
   ];
-
-  // ── Radial gauge data ──────────────────────────────────────────────────────
   const radialData = [{ name: 'Coverage', value: result.coveragePct, fill: result.isNeutral ? '#10b981' : '#f59e0b' }];
 
   const periodLabel = { daily: 'Day', monthly: 'Month', yearly: 'Year' }[period];
 
   return (
     <div className="fade-in">
-
-      {/* ── Period Selector ── */}
       <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '2rem' }}>
         {['daily', 'monthly', 'yearly'].map(p => (
           <button
@@ -114,27 +91,25 @@ export default function CarbonSinkModule() {
         ))}
       </div>
 
-      {/* ── Input Section ── */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.5rem', marginBottom: '2rem' }}>
-
         <div className="kpi-card">
-          <div className="kpi-title">🔥 Total Emissions (kg CO₂e / day)</div>
+          <div className="kpi-title"><FaFire /> Total Emissions (kg CO₂e / day)</div>
           <input
             type="number"
             value={totalEmissions}
             onChange={e => setTotalEmissions(parseFloat(e.target.value) || 0)}
             style={{
               background: 'rgba(0,0,0,0.2)', border: '1px solid var(--border-light)',
-              borderRadius: '8px', padding: '0.6rem 0.9rem', color: 'var(--text-main)',
+              borderRadius: '8px', padding: '0.6rem 0.9rem', color: '#ef4444',
               fontFamily: 'inherit', fontSize: '1.5rem', fontWeight: 700,
-              width: '100%', marginTop: '0.5rem', color: '#ef4444'
+              width: '100%', marginTop: '0.5rem'
             }}
           />
           <div className="kpi-trend">Enter your mine's daily emissions figure</div>
         </div>
 
         <div className="kpi-card">
-          <div className="kpi-title">🌳 Trees Planted (total)</div>
+          <div className="kpi-title"><FaTree /> Trees Planted (total)</div>
           <input
             type="number"
             value={trees}
@@ -150,7 +125,7 @@ export default function CarbonSinkModule() {
         </div>
 
         <div className="kpi-card">
-          <div className="kpi-title">🌿 Forest Area (hectares)</div>
+          <div className="kpi-title"><FaSeedling /> Forest Area (hectares)</div>
           <input
             type="number"
             value={hectares}
@@ -166,7 +141,6 @@ export default function CarbonSinkModule() {
         </div>
       </div>
 
-      {/* ── Status Banner ── */}
       <div style={{
         padding: '1.25rem 1.5rem',
         borderRadius: '12px',
@@ -177,7 +151,7 @@ export default function CarbonSinkModule() {
         marginBottom: '2rem',
         display: 'flex', alignItems: 'center', gap: '1rem'
       }}>
-        <span style={{ fontSize: '2rem' }}>{result.isNeutral ? '🏆' : '⚠️'}</span>
+        <span style={{ fontSize: '2rem' }}>{result.isNeutral ? <FaTrophy /> : ''}</span>
         <div>
           <strong style={{ fontSize: '1.1rem', color: result.isNeutral ? '#10b981' : '#f59e0b' }}>
             {result.isNeutral ? 'Carbon Neutral! Net surplus achieved.' : `Carbon Deficit — ${fmt(result.gap)} kg CO₂e gap this ${periodLabel}`}
@@ -191,31 +165,30 @@ export default function CarbonSinkModule() {
         </div>
       </div>
 
-      {/* ── KPI Cards ── */}
       <div className="kpi-grid" style={{ marginBottom: '2rem' }}>
         <StatCard
-          title={`🔥 Emissions (${periodLabel})`}
+          title={<><FaFire /> Emissions ({periodLabel})</>}
           value={fmt(result.scaledEmissions)}
           unit="kg CO₂e"
           color="#ef4444"
           sub={`Daily rate × ${period === 'monthly' ? 30 : period === 'yearly' ? 365 : 1} days`}
         />
         <StatCard
-          title={`🌲 Total Sink (${periodLabel})`}
+          title={<><FaTree /> Total Sink ({periodLabel})</>}
           value={fmt(result.totalSink)}
           unit="kg CO₂"
           color="#10b981"
           sub={`Trees: ${fmt(result.treeSink)} kg + Area: ${fmt(result.hectareSink)} kg`}
         />
         <StatCard
-          title={`⚖️ Carbon Gap (${periodLabel})`}
+          title={<><FaBalanceScale /> Carbon Gap ({periodLabel})</>}
           value={result.isNeutral ? '0' : fmt(result.gap)}
           unit="kg CO₂e"
           color={result.isNeutral ? '#10b981' : '#f59e0b'}
           sub={result.isNeutral ? 'Neutral!' : `${fmt(result.treesNeeded)} trees OR ${fmt(result.hectaresNeeded, 1)} ha needed`}
         />
         <StatCard
-          title="💰 Credits Earned"
+          title={<><FaCoins /> Credits Earned</>}
           value={fmt(result.creditsEarned, 2)}
           unit="credits"
           color="#8b5cf6"
@@ -223,7 +196,6 @@ export default function CarbonSinkModule() {
         />
       </div>
 
-      {/* ── Market Value Cards ── */}
       {result.isNeutral && (
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', marginBottom: '2rem' }}>
           <div className="kpi-card" style={{ background: 'linear-gradient(135deg, rgba(139,92,246,0.15), rgba(139,92,246,0.03))', border: '1px solid #8b5cf6' }}>
@@ -234,7 +206,7 @@ export default function CarbonSinkModule() {
             <div className="kpi-trend">{fmt(result.creditsEarned, 2)} credits × ${CREDIT_PRICE_USD}/credit</div>
           </div>
           <div className="kpi-card" style={{ background: 'linear-gradient(135deg, rgba(16,185,129,0.15), rgba(16,185,129,0.03))', border: '1px solid #10b981' }}>
-            <div className="kpi-title">💰 Market Value (INR)</div>
+            <div className="kpi-title"><FaCoins /> Market Value (INR)</div>
             <div className="kpi-value" style={{ color: '#10b981', fontSize: '2rem' }}>
               {fmtCurr(result.marketValueINR, '₹')}
             </div>
@@ -243,13 +215,10 @@ export default function CarbonSinkModule() {
         </div>
       )}
 
-      {/* ── Charts ── */}
       <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '1.5rem', marginBottom: '2rem' }}>
-
-        {/* Comparison Bar Chart */}
         <div className="chart-card">
           <div className="chart-header">
-            <h3>📊 Emissions vs Sinks vs Gap</h3>
+            <h3><FaChartBar /> Emissions vs Sinks vs Gap</h3>
             <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>All values in kg CO₂e for selected {periodLabel}</p>
           </div>
           <div style={{ height: 280 }}>
@@ -269,7 +238,6 @@ export default function CarbonSinkModule() {
           </div>
         </div>
 
-        {/* Radial Sink Coverage Gauge */}
         <div className="chart-card" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
           <div className="chart-header" style={{ width: '100%' }}>
             <h3>🎯 Sink Coverage</h3>
@@ -306,7 +274,6 @@ export default function CarbonSinkModule() {
         </div>
       </div>
 
-      {/* ── Path to Neutrality Table ── */}
       {!result.isNeutral && (
         <div className="chart-card">
           <div className="chart-header">
@@ -325,17 +292,17 @@ export default function CarbonSinkModule() {
             </thead>
             <tbody>
               <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-                <td style={{ padding: '0.85rem' }}>🌳 Plant Trees</td>
+                <td style={{ padding: '0.85rem' }}><FaTree /> Plant Trees</td>
                 <td style={{ padding: '0.85rem', color: '#10b981', fontWeight: 600 }}>{fmt(result.treesNeeded)} trees</td>
                 <td style={{ padding: '0.85rem' }}>-{fmt(result.gap)} kg/yr</td>
               </tr>
               <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-                <td style={{ padding: '0.85rem' }}>🌿 Expand Forest Area</td>
+                <td style={{ padding: '0.85rem' }}><FaSeedling /> Expand Forest Area</td>
                 <td style={{ padding: '0.85rem', color: '#3b82f6', fontWeight: 600 }}>{fmt(result.hectaresNeeded, 2)} hectares</td>
                 <td style={{ padding: '0.85rem' }}>-{fmt(result.gap)} kg/yr</td>
               </tr>
               <tr>
-                <td style={{ padding: '0.85rem' }}>💰 Buy Carbon Credits</td>
+                <td style={{ padding: '0.85rem' }}><FaCoins /> Buy Carbon Credits</td>
                 <td style={{ padding: '0.85rem', color: '#8b5cf6', fontWeight: 600 }}>
                   {fmt(result.gap / CARBON_CREDIT_TONNE, 2)} credits
                 </td>

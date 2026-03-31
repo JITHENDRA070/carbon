@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { supabase, MINE_AUTH_TABLE } from '../lib/supabase'
 import { getMineIdFromSession, mineIdToEmail, normalizeMineId } from '../lib/mineAuth'
 import { MineAuthContext } from '../context/MineAuthContext'
+import { FaHammer, FaKey, FaPlusCircle } from "react-icons/fa";
 
 export default function MineAuthGate({ children }) {
   const [session, setSession]   = useState(null)
@@ -9,12 +10,12 @@ export default function MineAuthGate({ children }) {
 
   const [mineId,   setMineId]   = useState('')
   const [password, setPassword] = useState('')
-  const [mode,     setMode]     = useState('login') // 'login' | 'register'
+  const [mode,     setMode]     = useState('login')
   const [error,    setError]    = useState('')
   const [info,     setInfo]     = useState('')
   const [busy,     setBusy]     = useState(false)
 
-  /* ── Session bootstrap ──────────────────────────────────────────── */
+  
   useEffect(() => {
     let mounted = true
     supabase.auth
@@ -40,7 +41,7 @@ export default function MineAuthGate({ children }) {
     }
   }, [])
 
-  /* Restore synthetic session stored in localStorage after page reload */
+  
   useEffect(() => {
     if (!loading && !session) {
       const stored = localStorage.getItem('mineauth_mineid')
@@ -55,17 +56,17 @@ export default function MineAuthGate({ children }) {
     [session],
   )
 
-  /* ── Helpers ────────────────────────────────────────────────────── */
+  
   function clearMessages() { setError(''); setInfo('') }
 
-  /* ── Sign Out ───────────────────────────────────────────────────── */
+  
   async function signOut() {
     localStorage.removeItem('mineauth_mineid')
     await supabase.auth.signOut()
     setSession(null)
   }
 
-  /* ── Registration ───────────────────────────────────────────────── */
+  
   async function doRegister(e) {
     e.preventDefault()
     clearMessages()
@@ -105,7 +106,7 @@ export default function MineAuthGate({ children }) {
         throw authErr
       }
 
-      setInfo(`✅ Mine ID "${id}" registered! You can now sign in.`)
+      setInfo(` Mine ID "${id}" registered! You can now sign in.`)
       setMode('login')
       setMineId(id)
       setPassword('')
@@ -117,7 +118,7 @@ export default function MineAuthGate({ children }) {
     }
   }
 
-  /* ── Login ──────────────────────────────────────────────────────── */
+  
   async function doLogin(e) {
     e.preventDefault()
     clearMessages()
@@ -161,13 +162,13 @@ export default function MineAuthGate({ children }) {
     }
   }
 
-  /* ── Context value ──────────────────────────────────────────────── */
+  
   const authCtxValue = useMemo(
     () => ({ session, mineId: authedMineId, signOut }),
     [session, authedMineId],
   )
 
-  /* ── Render: loading ────────────────────────────────────────────── */
+  
   if (loading) {
     return (
       <div className="dashboard-container">
@@ -181,10 +182,10 @@ export default function MineAuthGate({ children }) {
     )
   }
 
-  /* ── Render: auth form (not signed in) ──────────────────────────── */
+  
   if (!session) {
     return (
-      /* Provide context even on auth page so Navbar can read it */
+      
       <MineAuthContext.Provider value={authCtxValue}>
         <div className="dashboard-container">
           <main className="main-content">
@@ -198,9 +199,9 @@ export default function MineAuthGate({ children }) {
                 padding: '2rem',
               }}
             >
-              {/* Header */}
+              
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.5rem' }}>
-                <span style={{ fontSize: '2rem' }}>⛏️</span>
+                <span style={{ fontSize: '2rem' }}><FaHammer /></span>
                 <div>
                   <div className="kpi-title" style={{ fontSize: '0.8rem', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
                     IndianCoal™ Zero
@@ -261,7 +262,7 @@ export default function MineAuthGate({ children }) {
                     background: 'rgba(239,68,68,0.12)', border: '1px solid #ef4444',
                     borderRadius: '8px', color: '#ef4444', fontWeight: 600,
                   }}>
-                    ⚠️ {error}
+                     {error}
                   </div>
                 )}
 
@@ -269,8 +270,8 @@ export default function MineAuthGate({ children }) {
                   <button className="btn-primary" type="submit" disabled={busy}
                     style={{ opacity: busy ? 0.7 : 1, flex: 1 }}>
                     {busy
-                      ? (mode === 'login' ? '⏳ Signing in…' : '⏳ Registering…')
-                      : (mode === 'login' ? '🔑 Sign In' : '🆕 Register')}
+                      ? (mode === 'login' ? ' Signing in…' : ' Registering…')
+                      : (mode === 'login' ? '<FaKey /> Sign In' : '<FaPlusCircle /> Register')}
                   </button>
                   <button className="btn-outline" type="button" disabled={busy}
                     onClick={() => { setMode((m) => (m === 'login' ? 'register' : 'login')); clearMessages() }}>
@@ -291,7 +292,7 @@ export default function MineAuthGate({ children }) {
     )
   }
 
-  /* ── Render: authenticated ──────────────────────────────────────── */
+  
   return (
     <MineAuthContext.Provider value={authCtxValue}>
       {children({ session, mineId: authedMineId })}

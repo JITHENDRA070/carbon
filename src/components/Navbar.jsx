@@ -1,5 +1,6 @@
 import { useMineAuth } from '../context/MineAuthContext'
 import './Navbar.css'
+import { FaHammer } from "react-icons/fa";
 
 export default function Navbar() {
   const auth    = useMineAuth()
@@ -10,16 +11,16 @@ export default function Navbar() {
     <header className="nav">
       <div className="nav__inner">
 
-        {/* ── Brand ─────────────────────────────────────────────── */}
+        
         <div className="nav__brand">
-          <span className="nav__brand-icon">⛏️</span>
+          <span className="nav__brand-icon"><FaHammer /></span>
           <span>IndianCoal™ Zero</span>
         </div>
 
-        {/* ── Auth section (right side) ─────────────────────────── */}
+        
         <div className="nav__auth">
           {mineId ? (
-            /* ─── Signed In ─── */
+            
             <>
               <div className="nav__mine-badge">
                 <span className="nav__mine-dot" aria-hidden="true" />
@@ -38,7 +39,7 @@ export default function Navbar() {
               </button>
             </>
           ) : (
-            /* ─── Signed Out ─── */
+            
             <>
               <span className="nav__guest-label">Not signed in</span>
               <span className="nav__badge-guest">Sign in below ↓</span>
