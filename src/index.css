@@ -674,4 +674,57 @@ body {
 
 .fade-in {
   animation: fadeIn 0.35s ease forwards;
+}
+
+/* ── Mobile Layout overrides ─────────────────────────────── */
+@media (max-width: 768px) {
+  .dashboard-container { flex-direction: column; }
+  .sidebar {
+    width: 100%;
+    padding: 1.25rem 1rem 1rem;
+    border-right: none;
+    border-bottom: 1px solid var(--border-light);
+    height: auto;
+  }
+  .brand { margin-bottom: 1rem; justify-content: center; }
+  .nav-links { flex-direction: row; flex-wrap: wrap; justify-content: center; gap: 0.4rem; }
+  .nav-link { padding: 0.6rem 0.8rem; font-size: 0.85rem; }
+  .main-content { padding: 1.5rem 1rem; } 
+  .header { flex-direction: column; align-items: flex-start; gap: 1rem; }
+  .header h1 { font-size: 1.6rem; }
+  .header-actions { flex-direction: column; width: 100%; gap: 0.5rem; }
+  .header-actions button { width: 100%; } 
+  .kpi-grid { grid-template-columns: 1fr; }
+
+  .credits-kpi-row { display: grid; grid-template-columns: 1fr; gap: 1rem; }
+  
+  /* Tables */
+  .cb-table { min-width: 500px; }
+  .cb { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .credits-table-wrapper { overflow-x: auto; }
+}
+
+/* Helper Classes for Component Layouts */
+.responsive-grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+}
+@media (max-width: 768px) {
+  .responsive-grid-2 { grid-template-columns: 1fr; }
+}
+
+.responsive-grid-2-1 {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 1.5rem;
+}
+@media (max-width: 900px) {
+  .responsive-grid-2-1 { grid-template-columns: 1fr; }
+}
+
+.table-responsive {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }

@@ -271,7 +271,7 @@ export default function MineAuthGate({ children }) {
                     style={{ opacity: busy ? 0.7 : 1, flex: 1 }}>
                     {busy
                       ? (mode === 'login' ? ' Signing in…' : ' Registering…')
-                      : (mode === 'login' ? '<FaKey /> Sign In' : '<FaPlusCircle /> Register')}
+                      : (mode === 'login' ? <><FaKey /> Sign In</> : <><FaPlusCircle /> Register</>)}
                   </button>
                   <button className="btn-outline" type="button" disabled={busy}
                     onClick={() => { setMode((m) => (m === 'login' ? 'register' : 'login')); clearMessages() }}>

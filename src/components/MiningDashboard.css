@@ -360,3 +360,7 @@
   .mdb__tabs { width: 100%; }
   .mdb__tab { flex: 1; justify-content: center; }
 }
+
+@media (max-width: 480px) {
+  .mdb__kpi-grid { grid-template-columns: 1fr; }
+}

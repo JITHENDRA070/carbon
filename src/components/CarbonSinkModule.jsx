@@ -197,7 +197,7 @@ export default function CarbonSinkModule() {
       </div>
 
       {result.isNeutral && (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', marginBottom: '2rem' }}>
+        <div className="responsive-grid-2" style={{ marginBottom: '2rem' }}>
           <div className="kpi-card" style={{ background: 'linear-gradient(135deg, rgba(139,92,246,0.15), rgba(139,92,246,0.03))', border: '1px solid #8b5cf6' }}>
             <div className="kpi-title">💵 Market Value (USD)</div>
             <div className="kpi-value" style={{ color: '#8b5cf6', fontSize: '2rem' }}>
@@ -215,7 +215,7 @@ export default function CarbonSinkModule() {
         </div>
       )}
 
-      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '1.5rem', marginBottom: '2rem' }}>
+      <div className="responsive-grid-2-1" style={{ marginBottom: '2rem' }}>
         <div className="chart-card">
           <div className="chart-header">
             <h3><FaChartBar /> Emissions vs Sinks vs Gap</h3>
@@ -282,9 +282,10 @@ export default function CarbonSinkModule() {
               Options to close the {fmt(result.gap)} kg CO₂e gap this {periodLabel}
             </p>
           </div>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.95rem' }}>
-            <thead>
-              <tr style={{ borderBottom: '1px solid var(--border-light)' }}>
+          <div className="table-responsive">
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.95rem', minWidth: '500px' }}>
+              <thead>
+                <tr style={{ borderBottom: '1px solid var(--border-light)' }}>
                 {['Strategy', 'Quantity Required', 'Impact (kg CO₂e)'].map(h => (
                   <th key={h} style={{ padding: '0.75rem', color: 'var(--text-muted)', fontWeight: 500, textAlign: 'left' }}>{h}</th>
                 ))}
@@ -311,7 +312,8 @@ export default function CarbonSinkModule() {
                 </td>
               </tr>
             </tbody>
-          </table>
+            </table>
+          </div>
         </div>
       )}
     </div>
